@@ -9,6 +9,20 @@ This repository contains the source code, datasets, and empirical analysis for a
 
 This research was conducted as an Honors Project for CSE 1320 at the University of Texas at Arlington.
 
+## 📊 Key Findings (Executive Summary)
+Our empirical analysis reveals a clear performance hierarchy driven by language architecture:
+- **C (Compiled):** Demonstrates near-zero overhead, outperforming Python by several orders of magnitude in computational-heavy sorting tasks.
+- **Java (JIT/Bytecode):** Shows significant "warm-up" performance gains. While slightly slower than C, it maintains exceptional throughput for large datasets (N=5000), consistently beating Python.
+- **Python (Interpreted):** Exhibits the highest overhead. Performance degrades sharply in worst-case scenarios (e.g., Quicksort on pre-sorted data), where execution time scales poorly compared to compiled alternatives.
+
+### Performance Visualizations
+| Total Execution Time | Cross-Language Speedup |
+|:---:|:---:|
+| ![Total Time](results/graphs/summary_total_seconds_by_language.png) | ![Speedup vs C](results/graphs/cross_speedup_vs_c.png) |
+
+> [!TIP]
+> **Full Research Report:** For a detailed deep dive into the methodology, experimental setup, and granular data analysis, please see our modular [IEEE Research Paper Index](docs/index.md).
+
 ## Algorithms Analyzed
 The performance of each language is evaluated across both sorting and searching paradigms:
 * **Sorting:** Quick Sort
