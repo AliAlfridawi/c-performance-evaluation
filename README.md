@@ -91,5 +91,24 @@ mvn -q exec:java -Dexec.args="quicksort descending 2000"
 
 Wall-clock time uses `System.nanoTime()`; comparison counts come from `Algorithms.getComparisonCount()`.
 
+### Benchmark data and graphs
+
+1. Install plotting dependencies: `pip install -r requirements.txt`
+2. Collect timings into [results/data/benchmark_runs.csv](results/data/benchmark_runs.csv):
+
+   ```text
+   python scripts/collect_benchmarks.py
+   ```
+
+   Options: `--languages python c java`, `--seed 42`, custom `--n 100 500 1000`. If the C `benchmark` executable is missing, C is skipped with a warning. For Java, `mvn` is resolved from `PATH` or a typical Scoop install under `%USERPROFILE%\scoop\apps\maven`; the JDK is taken from `JAVA_HOME` or Scoop’s `temurin*-jdk` / similar. If Maven or a JDK cannot be found, Java is skipped.
+
+3. Generate figures under [results/graphs/](results/graphs/):
+
+   ```text
+   python scripts/plot_benchmarks.py
+   ```
+
+   Outputs include cross-language faceted plots (time and comparisons vs N), speedup vs C, grouped bar charts at selected N, heatmaps, per-language time and comparison curves, quicksort distribution effects, throughput proxies, a total-time summary bar, and a note on PRNG differences for **random** inputs (C, Python, and Java use different random sequences for the same seed).
+
 ---
 *Author: Ali Alfridawi*

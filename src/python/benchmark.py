@@ -34,10 +34,18 @@ def build_array(n: int, distribution: Distribution, seed: int) -> list[int]:
 def run_benchmark(algorithm: Algorithm, distribution: Distribution, n: int, seed: int) -> None:
     arr = build_array(n, distribution, seed)
     if algorithm == "quicksort":
-        reset_comparison_count()
-        t0 = time.perf_counter()
-        quick_sort(arr)
-        elapsed = time.perf_counter() - t0
+        # Lomuto pivot can recurse O(n) deep on sorted/reverse inputs; avoid RecursionError.
+        old_rl = sys.getrecursionlimit()
+        need = max(old_rl, n + 500)
+        if need > old_rl:
+            sys.setrecursionlimit(need)
+        try:
+            reset_comparison_count()
+            t0 = time.perf_counter()
+            quick_sort(arr)
+            elapsed = time.perf_counter() - t0
+        finally:
+            sys.setrecursionlimit(old_rl)
     elif algorithm == "linear_search":
         target = arr[0] if arr else 0
         reset_comparison_count()
