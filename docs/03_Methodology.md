@@ -31,9 +31,9 @@ For binary search, sorting is treated as input preparation and is not included i
 ## D. Metrics
 
 - `comparisons`: hardware-independent work performed by the algorithm
-- `elapsed_ns`: timed execution in nanoseconds
+- `elapsed_ns`: in-process execution time measured immediately around the algorithm call
 
-Very small workloads are batched until at least `0.5 ms` of total work has been measured. Reported timing is then normalized back to seconds per run.
+Timing excludes process startup, argument parsing, input loading, and binary-search presorting. Very small workloads are batched until at least `0.5 ms` of total work has been measured. Reported timing is then normalized back to seconds per run.
 
 ## E. Trial Policy
 
@@ -41,3 +41,4 @@ Very small workloads are batched until at least `0.5 ms` of total work has been 
 - `20` measured trials per configuration
 - Published summaries use the median of measured trials
 - Min/max bands are preserved to show spread
+- The warm-up policy provides a practical JVM baseline, but it is not intended to establish steady-state Java performance

@@ -4,13 +4,13 @@
 
 ![Quick sort timing](../results/graphs/quicksort_median_time.png)
 
-Comparison counts match across languages for every quick sort configuration, so the timing gaps reflect runtime overhead rather than mismatched work. At `N=5000` on random input:
+Comparison counts match across languages for every quick sort configuration, so the timing gaps reflect observed in-process execution cost under this harness rather than mismatched work. At `N=5000` on random input:
 
 - C median: `0.000132 s`
 - Java median: `0.000316 s`
 - Python median: `0.012126 s`
 
-The current median-of-three partition logic also changes the sorted-input behavior relative to the older CSVs that were still checked into the repository.
+The current median-of-three partition logic also changes the sorted-input behavior relative to the older CSVs that were still checked into the repository. Java also shows visibly wider min-max bands than C for several configurations, so the Java medians should be interpreted as harness-specific observations rather than steady-state JVM claims.
 
 ## B. Linear Search
 
@@ -34,4 +34,4 @@ Binary search remains logarithmic in comparison count. At `N=5000`, the search c
 
 ![Comparison counts](../results/graphs/comparison_counts.png)
 
-The summary CSV shows no comparison-count mismatches across languages for any published configuration. That is the strongest evidence that the shared-input protocol is working.
+The summary CSV shows no comparison-count mismatches across languages for any published configuration. That is the strongest evidence that the shared-input protocol is working, because the collection pipeline now fails instead of silently publishing incomplete or inconsistent groups.

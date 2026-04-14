@@ -23,13 +23,14 @@ The focus is not just "which language is fastest," but whether the benchmark pro
 - Linear search and binary search are tested on `ascending` inputs with `first_hit`, `middle_hit`, `last_hit`, and `miss` cases.
 - Each configuration runs `5` warm-up trials and `20` measured trials.
 - Very small workloads are batched until at least `0.5 ms` of total timed work is collected, then normalized back to per-run timing.
+- `elapsed_ns` measures only the in-process algorithm section; process startup, input loading, and binary-search presorting are excluded.
 - Raw rows are written to `results/data/benchmark_runs.csv`; median summaries are written to `results/data/benchmark_summary.csv`.
 
 ## Key Findings
 
 - Comparison counts align across all three languages for every published configuration, which confirms the shared-input protocol is working as intended.
-- For quick sort at `N=5000` on random input, the median per-run times are about `0.000132 s` in C, `0.000316 s` in Java, and `0.012126 s` in Python.
-- For quick sort at `N=5000`, Java is about `2.39x` slower than C on random input, while Python is about `91.6x` slower than C.
+- Under this harness on one Windows 11 machine, quick sort at `N=5000` on random input has median in-process times of about `0.000132 s` in C, `0.000316 s` in Java, and `0.012126 s` in Python.
+- Those medians correspond to observed ratios of about `2.39x` for Java vs. C and `91.6x` for Python vs. C in this setup; they should not be read as steady-state language rankings.
 - Linear search behaves exactly as the search case predicts: `first_hit` stays near one comparison, while `last_hit` and `miss` reach `5000` comparisons at `N=5000`.
 - Binary search stays near logarithmic behavior: at `N=5000`, the comparison count ranges from `23` to `26` depending on the search case.
 
@@ -42,10 +43,12 @@ The focus is not just "which language is fastest," but whether the benchmark pro
    - `cd src/c && mingw32-make test`
    - `mvn test`
    - `cd src/python && python -m unittest test_algorithms.py`
+   - `python -m unittest test_benchmark_pipeline.py`
 3. Regenerate shared inputs:
    - `python data/DataSetGenerator.py`
 4. Collect raw trials:
    - `python scripts/collect_benchmarks.py`
+   - The collector now fails by default if any language/case is missing or inconsistent. Use `--allow-partial` only for local debugging.
 5. Generate summary CSVs and plots:
    - `python scripts/plot_benchmarks.py`
 
@@ -60,7 +63,8 @@ The focus is not just "which language is fastest," but whether the benchmark pro
 ## Limitations
 
 - Results come from one Windows 11 machine and should not be treated as a universal language ranking.
-- Each benchmark configuration is launched as a separate process, so runtime startup costs remain part of the observed overhead.
+- Each benchmark configuration is launched as a separate process, but `elapsed_ns` measures only the in-process algorithm section after setup. Startup, input loading, and binary-search presorting are excluded.
+- Java still shows visible run-to-run spread in several configurations, so the reported medians are practical observations under this harness rather than steady-state JVM claims.
 - The project tracks execution time and comparison counts, not memory usage, cache effects, or CPU affinity controls.
 
 The supporting report lives in [docs/index.md](docs/index.md).

@@ -13,6 +13,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CSV = REPO_ROOT / "results" / "data" / "benchmark_runs.csv"
 DEFAULT_SUMMARY = REPO_ROOT / "results" / "data" / "benchmark_summary.csv"
 DEFAULT_OUT = REPO_ROOT / "results" / "graphs"
+DEFAULT_LANGUAGES = ("c", "java", "python")
+QUICKSORT_DISTRIBUTIONS = ("random", "ascending", "descending")
+SEARCH_ALGORITHMS = ("linear_search", "binary_search")
 
 LANG_STYLE = {
     "c": {"color": "#1f77b4", "label": "C"},
@@ -29,6 +32,10 @@ SEARCH_CASE_LABELS = {
 }
 
 
+class SummaryValidationError(RuntimeError):
+    """Raised when raw benchmark data is incomplete or internally inconsistent."""
+
+
 def load_trials(path: Path) -> pd.DataFrame:
     df = pd.read_csv(path)
     numeric_cols = ("N", "trial", "warmup", "comparisons", "elapsed_ns", "batch_loops")
@@ -38,6 +45,101 @@ def load_trials(path: Path) -> pd.DataFrame:
     df["language"] = df["language"].str.lower().str.strip()
     df["seconds_per_run"] = df["elapsed_ns"] / df["batch_loops"].clip(lower=1) / 1_000_000_000.0
     return df
+
+
+def _expected_group_keys(n_values: list[int], languages: list[str]) -> set[tuple[str, str, str, str, int, str]]:
+    expected: set[tuple[str, str, str, str, int, str]] = set()
+    for n in n_values:
+        for distribution in QUICKSORT_DISTRIBUTIONS:
+            input_id = f"{distribution}_n{n}"
+            for language in languages:
+                expected.add((language, "quicksort", distribution, input_id, n, "sort"))
+        for algorithm in SEARCH_ALGORITHMS:
+            input_id = f"ascending_n{n}"
+            for search_case in SEARCH_CASE_LABELS:
+                for language in languages:
+                    expected.add((language, algorithm, "ascending", input_id, n, search_case))
+    return expected
+
+
+def validate_trials(df: pd.DataFrame, *, strict: bool = True) -> None:
+    if df.empty:
+        raise SummaryValidationError("no rows in raw benchmark CSV")
+
+    present_languages = sorted(df["language"].dropna().unique().tolist())
+    if not present_languages:
+        raise SummaryValidationError("raw benchmark CSV does not contain any languages")
+
+    languages = list(DEFAULT_LANGUAGES) if strict else present_languages
+    if strict:
+        missing_languages = sorted(set(DEFAULT_LANGUAGES) - set(present_languages))
+        if missing_languages:
+            raise SummaryValidationError(
+                "raw benchmark CSV is missing required languages: " + ", ".join(missing_languages)
+            )
+
+    group_cols = ["language", "algorithm", "distribution", "input_id", "N", "search_case"]
+    group_counts = (
+        df.groupby(group_cols, as_index=False)
+        .agg(
+            warmup_rows=("warmup", lambda s: int((s == 1).sum())),
+            measured_rows=("warmup", lambda s: int((s == 0).sum())),
+            invalid_warmup=("warmup", lambda s: int((~s.isin([0, 1])).sum())),
+            comparison_variants=("comparisons", "nunique"),
+        )
+    )
+
+    if (group_counts["invalid_warmup"] > 0).any():
+        raise SummaryValidationError("raw benchmark CSV contains invalid warmup flags")
+    if (group_counts["comparison_variants"] != 1).any():
+        raise SummaryValidationError("raw benchmark CSV contains inconsistent comparison counts within a group")
+
+    measured_counts = sorted(group_counts["measured_rows"].unique().tolist())
+    warmup_counts = sorted(group_counts["warmup_rows"].unique().tolist())
+    if len(measured_counts) != 1 or measured_counts[0] <= 0:
+        raise SummaryValidationError("raw benchmark CSV has inconsistent measured-trial counts across groups")
+    if len(warmup_counts) != 1:
+        raise SummaryValidationError("raw benchmark CSV has inconsistent warmup counts across groups")
+
+    n_values = sorted(int(value) for value in df["N"].dropna().unique().tolist())
+    expected_groups = _expected_group_keys(n_values, languages)
+    actual_groups = {
+        (
+            row.language,
+            row.algorithm,
+            row.distribution,
+            row.input_id,
+            int(row.N),
+            row.search_case,
+        )
+        for row in group_counts.itertuples(index=False)
+        if row.language in languages
+    }
+
+    missing_groups = sorted(expected_groups - actual_groups)
+    if missing_groups:
+        preview = ", ".join(
+            f"{language}:{algorithm}/{distribution}/N={n}/{search_case}"
+            for language, algorithm, distribution, _input_id, n, search_case in missing_groups[:6]
+        )
+        raise SummaryValidationError("raw benchmark CSV is missing expected groups: " + preview)
+
+    unexpected_groups = sorted(actual_groups - expected_groups)
+    if unexpected_groups:
+        preview = ", ".join(
+            f"{language}:{algorithm}/{distribution}/N={n}/{search_case}"
+            for language, algorithm, distribution, _input_id, n, search_case in unexpected_groups[:6]
+        )
+        raise SummaryValidationError("raw benchmark CSV contains unexpected groups: " + preview)
+
+    comparison_frame = (
+        df.groupby(group_cols, as_index=False)
+        .agg(comparisons=("comparisons", "first"))
+        .groupby(["algorithm", "distribution", "input_id", "N", "search_case"], as_index=False)
+        .agg(comparison_variants=("comparisons", "nunique"))
+    )
+    if (comparison_frame["comparison_variants"] != 1).any():
+        raise SummaryValidationError("raw benchmark CSV contains cross-language comparison-count mismatches")
 
 
 def summarize_trials(df: pd.DataFrame) -> pd.DataFrame:
@@ -179,15 +281,12 @@ def plot_comparisons(summary: pd.DataFrame, out: Path) -> None:
     plt.close(fig)
 
 
-def run_all(raw_csv: Path, summary_csv: Path, out_dir: Path) -> None:
+def run_all(raw_csv: Path, summary_csv: Path, out_dir: Path, *, strict: bool = True) -> None:
     trials = load_trials(raw_csv)
-    if trials.empty:
-        print("no rows in raw benchmark CSV", file=sys.stderr)
-        return
+    validate_trials(trials, strict=strict)
     summary = summarize_trials(trials)
     if summary.empty:
-        print("no measured trials found in raw benchmark CSV", file=sys.stderr)
-        return
+        raise SummaryValidationError("no measured trials found in raw benchmark CSV")
 
     out_dir.mkdir(parents=True, exist_ok=True)
     summary_csv.parent.mkdir(parents=True, exist_ok=True)
@@ -204,13 +303,22 @@ def main() -> int:
     parser.add_argument("--csv", type=Path, default=DEFAULT_CSV, help="Raw trial CSV path")
     parser.add_argument("--summary-out", type=Path, default=DEFAULT_SUMMARY, help="Summary CSV output")
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT, help="Graph output directory")
+    parser.add_argument(
+        "--allow-partial",
+        action="store_true",
+        help="Plot partial raw data instead of requiring a complete three-language benchmark matrix",
+    )
     args = parser.parse_args()
 
     if not args.csv.is_file():
         print(f"CSV not found: {args.csv}", file=sys.stderr)
         return 1
 
-    run_all(args.csv, args.summary_out, args.out)
+    try:
+        run_all(args.csv, args.summary_out, args.out, strict=not args.allow_partial)
+    except SummaryValidationError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
     print(f"summary written to {args.summary_out}")
     print(f"graphs written to {args.out}")
     return 0

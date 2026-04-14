@@ -8,14 +8,19 @@ import os
 import shutil
 import subprocess
 import sys
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUTPUT = REPO_ROOT / "results" / "data" / "benchmark_runs.csv"
 DEFAULT_N = [10, 25, 50, 100, 200, 500, 1000, 2000, 5000]
 DEFAULT_TRIALS = 20
 DEFAULT_WARMUP = 5
+DEFAULT_LANGUAGES = ("python", "c", "java")
+QUICKSORT_DISTRIBUTIONS = ("random", "ascending", "descending")
+SEARCH_ALGORITHMS = ("linear_search", "binary_search")
 SEARCH_CASES = ("first_hit", "middle_hit", "last_hit", "miss")
 HEADER = (
     "language",
@@ -30,6 +35,12 @@ HEADER = (
     "elapsed_ns",
     "batch_loops",
 )
+CASE_FIELDS = ("algorithm", "distribution", "input_id", "N", "search_case")
+GROUP_FIELDS = ("language",) + CASE_FIELDS
+
+
+class CollectionValidationError(RuntimeError):
+    """Raised when the collector cannot produce a complete, consistent dataset."""
 
 
 @dataclass(frozen=True)
@@ -47,6 +58,9 @@ class BenchCase:
     n: int
     input_spec: InputSpec
     search_case: str
+
+
+Runner = Callable[[BenchCase, int, int], tuple[int, str]]
 
 
 def ensure_input_manifest() -> Path:
@@ -76,7 +90,22 @@ def load_inputs(manifest: Path, n_values: list[int]) -> dict[tuple[str, int], In
                 n=n,
                 path=REPO_ROOT / row["path"],
             )
+            if (spec.distribution, spec.n) in specs:
+                raise CollectionValidationError(
+                    f"duplicate manifest entry for distribution={spec.distribution}, N={spec.n}"
+                )
             specs[(spec.distribution, spec.n)] = spec
+
+    missing = [
+        f"{distribution},N={n}"
+        for n in n_values
+        for distribution in QUICKSORT_DISTRIBUTIONS
+        if (distribution, n) not in specs
+    ]
+    if missing:
+        raise CollectionValidationError(
+            "benchmark input manifest is missing required datasets: " + "; ".join(missing)
+        )
     return specs
 
 
@@ -102,20 +131,6 @@ def find_c_benchmark() -> Path | None:
     return None
 
 
-def find_maven_executable() -> str | None:
-    which = shutil.which("mvn")
-    if which:
-        return which
-    base = Path.home() / "scoop" / "apps" / "maven"
-    if not base.is_dir():
-        return None
-    for path in sorted(base.glob("*/bin/mvn.cmd"), reverse=True):
-        return str(path)
-    for path in sorted(base.glob("*/bin/mvn"), reverse=True):
-        return str(path)
-    return None
-
-
 def find_java_home() -> Path | None:
     java_home = os.environ.get("JAVA_HOME", "").strip()
     if java_home:
@@ -131,6 +146,24 @@ def find_java_home() -> Path | None:
                 return nested.parent.parent
             if (directory / "bin" / "java.exe").is_file():
                 return directory
+    return None
+
+
+def find_java_executable() -> str | None:
+    java_home = find_java_home()
+    if java_home is not None:
+        for name in ("java.exe", "java"):
+            candidate = java_home / "bin" / name
+            if candidate.is_file():
+                return str(candidate)
+    return shutil.which("java")
+
+
+def find_java_classes_dir() -> Path | None:
+    classes_dir = REPO_ROOT / "target" / "classes"
+    benchmark_class = classes_dir / "bench" / "Benchmark.class"
+    if benchmark_class.is_file():
+        return classes_dir
     return None
 
 
@@ -152,8 +185,8 @@ def _run(cmd: list[str], cwd: Path, env: dict[str, str] | None = None) -> tuple[
         return 1, str(exc)
 
 
-def parse_rows(text: str) -> list[tuple[str, ...]]:
-    rows: list[tuple[str, ...]] = []
+def parse_rows(text: str) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
     for raw in text.splitlines():
         line = raw.strip()
         if not line:
@@ -163,8 +196,180 @@ def parse_rows(text: str) -> list[tuple[str, ...]]:
             continue
         if parts[0] not in ("python", "c", "java"):
             continue
-        rows.append(tuple(parts))
+        rows.append(dict(zip(HEADER, parts)))
     return rows
+
+
+def _case_key(case: BenchCase) -> tuple[str, str, str, str, str]:
+    return (
+        case.algorithm,
+        case.distribution,
+        case.input_spec.input_id,
+        str(case.n),
+        case.search_case,
+    )
+
+
+def _group_key_from_row(row: dict[str, str]) -> tuple[str, str, str, str, str, str]:
+    return tuple(row[field] for field in GROUP_FIELDS)
+
+
+def _expected_group_key(language: str, case: BenchCase) -> tuple[str, str, str, str, str, str]:
+    return (language,) + _case_key(case)
+
+
+def _parse_int_field(row: dict[str, str], field: str) -> int | None:
+    try:
+        return int(row[field])
+    except (KeyError, ValueError):
+        return None
+
+
+def validate_case_rows(
+    rows: list[dict[str, str]],
+    case: BenchCase,
+    language: str,
+    trials: int,
+    warmup: int,
+) -> list[str]:
+    errors: list[str] = []
+    expected_total = trials + warmup
+    expected_group = _expected_group_key(language, case)
+
+    if len(rows) != expected_total:
+        errors.append(
+            f"{language} produced {len(rows)} rows for "
+            f"({case.algorithm},{case.distribution},N={case.n},{case.search_case}); "
+            f"expected {expected_total}"
+        )
+
+    seen_trials: set[int] = set()
+    comparisons: set[int] = set()
+    for row in rows:
+        actual_group = _group_key_from_row(row)
+        if actual_group != expected_group:
+            errors.append(
+                f"{language} emitted mismatched row fields for "
+                f"({case.algorithm},{case.distribution},N={case.n},{case.search_case})"
+            )
+            break
+
+        trial_no = _parse_int_field(row, "trial")
+        warmup_flag = _parse_int_field(row, "warmup")
+        batch_loops = _parse_int_field(row, "batch_loops")
+        comparison_count = _parse_int_field(row, "comparisons")
+
+        if trial_no is None or not 1 <= trial_no <= expected_total:
+            errors.append(
+                f"{language} emitted invalid trial index {row['trial']} for "
+                f"({case.algorithm},{case.distribution},N={case.n},{case.search_case})"
+            )
+        else:
+            seen_trials.add(trial_no)
+            expected_warmup_flag = 1 if trial_no <= warmup else 0
+            if warmup_flag != expected_warmup_flag:
+                errors.append(
+                    f"{language} emitted incorrect warmup flag for trial {trial_no} in "
+                    f"({case.algorithm},{case.distribution},N={case.n},{case.search_case})"
+                )
+
+        if batch_loops is None or batch_loops <= 0:
+            errors.append(
+                f"{language} emitted invalid batch_loops={row['batch_loops']} for "
+                f"({case.algorithm},{case.distribution},N={case.n},{case.search_case})"
+            )
+
+        if comparison_count is None or comparison_count < 0:
+            errors.append(
+                f"{language} emitted invalid comparisons={row['comparisons']} for "
+                f"({case.algorithm},{case.distribution},N={case.n},{case.search_case})"
+            )
+        elif comparison_count is not None:
+            comparisons.add(comparison_count)
+
+    if seen_trials and seen_trials != set(range(1, expected_total + 1)):
+        errors.append(
+            f"{language} emitted non-contiguous trial numbering for "
+            f"({case.algorithm},{case.distribution},N={case.n},{case.search_case})"
+        )
+
+    if len(comparisons) > 1:
+        errors.append(
+            f"{language} emitted inconsistent comparison counts for "
+            f"({case.algorithm},{case.distribution},N={case.n},{case.search_case})"
+        )
+
+    return errors
+
+
+def validate_collection_rows(
+    rows: list[dict[str, str]],
+    cases: list[BenchCase],
+    languages: list[str],
+    trials: int,
+    warmup: int,
+) -> list[str]:
+    errors: list[str] = []
+    expected_total = trials + warmup
+    grouped: dict[tuple[str, str, str, str, str, str], list[dict[str, str]]] = defaultdict(list)
+    for row in rows:
+        grouped[_group_key_from_row(row)].append(row)
+
+    expected_groups = {_expected_group_key(language, case) for case in cases for language in languages}
+    actual_groups = set(grouped)
+
+    missing_groups = sorted(expected_groups - actual_groups)
+    if missing_groups:
+        preview = ", ".join(
+            f"{language}:{algorithm}/{distribution}/N={n}/{search_case}"
+            for language, algorithm, distribution, _input_id, n, search_case in missing_groups[:6]
+        )
+        errors.append(f"missing benchmark groups: {preview}")
+
+    unexpected_groups = sorted(actual_groups - expected_groups)
+    if unexpected_groups:
+        preview = ", ".join(
+            f"{language}:{algorithm}/{distribution}/N={n}/{search_case}"
+            for language, algorithm, distribution, _input_id, n, search_case in unexpected_groups[:6]
+        )
+        errors.append(f"unexpected benchmark groups: {preview}")
+
+    for key, group_rows in grouped.items():
+        if len(group_rows) != expected_total:
+            language, algorithm, distribution, _input_id, n, search_case = key
+            errors.append(
+                f"{language} has {len(group_rows)} rows for "
+                f"({algorithm},{distribution},N={n},{search_case}); expected {expected_total}"
+            )
+
+    for case in cases:
+        comparison_counts: dict[str, int] = {}
+        for language in languages:
+            key = _expected_group_key(language, case)
+            if key not in grouped:
+                continue
+            values = {
+                comparison
+                for comparison in (_parse_int_field(row, "comparisons") for row in grouped[key])
+                if comparison is not None
+            }
+            if len(values) == 1:
+                comparison_counts[language] = next(iter(values))
+        if len(set(comparison_counts.values())) > 1:
+            errors.append(
+                "comparison-count mismatch across languages for "
+                f"({case.algorithm},{case.distribution},N={case.n},{case.search_case})"
+            )
+
+    return errors
+
+
+def write_rows(output_csv: Path, rows: list[dict[str, str]]) -> None:
+    with output_csv.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(HEADER)
+        for row in rows:
+            writer.writerow([row[column] for column in HEADER])
 
 
 def run_python(case: BenchCase, trials: int, warmup: int) -> tuple[int, str]:
@@ -204,35 +409,25 @@ def run_c(exe: Path, case: BenchCase, trials: int, warmup: int) -> tuple[int, st
     return _run(cmd, cwd=REPO_ROOT)
 
 
-def run_java(mvn_exe: str, java_home: Path | None, case: BenchCase, trials: int, warmup: int) -> tuple[int, str]:
-    args = " ".join(
-        [
-            case.algorithm,
-            case.distribution,
-            str(case.n),
-            "--input-file",
-            str(case.input_spec.path),
-            "--trials",
-            str(trials),
-            "--warmup",
-            str(warmup),
-            "--search-case",
-            case.search_case,
-        ]
-    )
+def run_java(java_exe: str, classes_dir: Path, case: BenchCase, trials: int, warmup: int) -> tuple[int, str]:
     cmd = [
-        mvn_exe,
-        "-q",
-        "exec:java",
-        "-Dexec.mainClass=bench.Benchmark",
-        f"-Dexec.args={args}",
+        java_exe,
+        "-cp",
+        str(classes_dir),
+        "bench.Benchmark",
+        case.algorithm,
+        case.distribution,
+        str(case.n),
+        "--input-file",
+        str(case.input_spec.path),
+        "--trials",
+        str(trials),
+        "--warmup",
+        str(warmup),
+        "--search-case",
+        case.search_case,
     ]
-    env = None
-    if java_home is not None:
-        env = os.environ.copy()
-        env["JAVA_HOME"] = str(java_home)
-        env["PATH"] = str(java_home / "bin") + os.pathsep + env.get("PATH", "")
-    return _run(cmd, cwd=REPO_ROOT, env=env)
+    return _run(cmd, cwd=REPO_ROOT)
 
 
 def collect(
@@ -241,14 +436,17 @@ def collect(
     trials: int,
     warmup: int,
     languages: list[str] | None,
+    strict: bool = True,
 ) -> None:
     manifest = ensure_input_manifest()
     inputs = load_inputs(manifest, n_values)
     cases = build_cases(inputs, n_values)
     output_csv.parent.mkdir(parents=True, exist_ok=True)
 
-    wanted = set(languages) if languages else {"python", "c", "java"}
-    runners: dict[str, object] = {}
+    requested_languages = list(languages) if languages else list(DEFAULT_LANGUAGES)
+    wanted = set(requested_languages)
+    runners: dict[str, Runner] = {}
+    setup_errors: list[str] = []
     if "python" in wanted:
         runners["python"] = run_python
 
@@ -257,42 +455,60 @@ def collect(
         if c_exe:
             runners["c"] = lambda case, t, w: run_c(c_exe, case, t, w)
         else:
-            print("warning: C benchmark not found (build src/c/benchmark.exe or benchmark)", file=sys.stderr)
+            setup_errors.append("C benchmark not found (build src/c/benchmark.exe or benchmark)")
 
     if "java" in wanted:
-        mvn_exe = find_maven_executable()
-        java_home = find_java_home()
-        if mvn_exe and java_home is not None:
-            runners["java"] = lambda case, t, w: run_java(mvn_exe, java_home, case, t, w)
+        java_exe = find_java_executable()
+        classes_dir = find_java_classes_dir()
+        if java_exe and classes_dir is not None:
+            runners["java"] = lambda case, t, w: run_java(java_exe, classes_dir, case, t, w)
         else:
-            if not mvn_exe:
-                print("warning: mvn not found (install Maven or add to PATH)", file=sys.stderr)
-            else:
-                print("warning: JDK not found (set JAVA_HOME or install a JDK)", file=sys.stderr)
+            if not java_exe:
+                setup_errors.append("Java runtime not found (install a JDK or set JAVA_HOME)")
+            if classes_dir is None:
+                setup_errors.append("Java benchmark classes not found (run `mvn -q -DskipTests compile` first)")
 
-    rows: list[tuple[str, ...]] = []
+    if not runners:
+        raise CollectionValidationError("no runnable benchmark targets are available")
+
+    if strict and setup_errors:
+        raise CollectionValidationError("\n".join(setup_errors))
+    for message in setup_errors:
+        print(f"warning: {message}", file=sys.stderr)
+
+    rows: list[dict[str, str]] = []
+    run_errors: list[str] = []
+    active_languages = [language for language in requested_languages if language in runners]
     for case in cases:
-        for language, runner in runners.items():
+        for language in active_languages:
+            runner = runners[language]
             code, output = runner(case, trials, warmup)  # type: ignore[misc]
             if code != 0:
-                print(
-                    f"warning: {language} failed ({case.algorithm},{case.distribution},N={case.n},{case.search_case}): {output[:240]}",
-                    file=sys.stderr,
+                run_errors.append(
+                    f"{language} failed ({case.algorithm},{case.distribution},N={case.n},{case.search_case}): {output[:240]}"
                 )
                 continue
             parsed = parse_rows(output)
             if not parsed:
-                print(
-                    f"warning: could not parse {language} output ({case.algorithm},{case.distribution},N={case.n},{case.search_case})",
-                    file=sys.stderr,
+                run_errors.append(
+                    f"could not parse {language} output ({case.algorithm},{case.distribution},N={case.n},{case.search_case})"
                 )
+                continue
+            case_errors = validate_case_rows(parsed, case, language, trials, warmup)
+            if case_errors:
+                run_errors.extend(case_errors)
                 continue
             rows.extend(parsed)
 
-    with output_csv.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.writer(handle)
-        writer.writerow(HEADER)
-        writer.writerows(rows)
+    validation_errors = validate_collection_rows(rows, cases, active_languages, trials, warmup)
+    errors = run_errors + validation_errors
+    if errors:
+        if strict:
+            raise CollectionValidationError("\n".join(errors))
+        for message in errors:
+            print(f"warning: {message}", file=sys.stderr)
+
+    write_rows(output_csv, rows)
 
     print(f"wrote {len(rows)} raw trial rows to {output_csv}")
 
@@ -312,13 +528,22 @@ def main() -> int:
     parser.add_argument(
         "--languages",
         nargs="*",
-        choices=["python", "c", "java"],
+        choices=list(DEFAULT_LANGUAGES),
         help="Subset of languages (default: all available)",
+    )
+    parser.add_argument(
+        "--allow-partial",
+        action="store_true",
+        help="Write partial data and emit warnings instead of failing on missing or inconsistent cases",
     )
     args = parser.parse_args()
 
     n_values = list(args.n) if args.n else DEFAULT_N
-    collect(args.output, n_values, args.trials, args.warmup, args.languages)
+    try:
+        collect(args.output, n_values, args.trials, args.warmup, args.languages, strict=not args.allow_partial)
+    except CollectionValidationError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
     return 0
 
 
