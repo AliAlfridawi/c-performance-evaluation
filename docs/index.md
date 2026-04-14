@@ -1,20 +1,21 @@
-# Algorithmic Performance Comparative Study: IEEE Research Report Index
+# Algorithmic Benchmark Report
 
-This modular research report provides an in-depth empirical analysis of algorithmic efficiency across C, Java, and Python. The report is structured according to the IEEE standard for technical papers.
+This folder contains the supporting write-up for the benchmark harness in this repository. The report mirrors the current code and the regenerated datasets in `results/data/`.
 
----
+## Sections
 
-## 📄 Report Modules
+1. [Abstract](00_Abstract.md)
+2. [Introduction](01_Introduction.md)
+3. [Background](02_Background.md)
+4. [Methodology](03_Methodology.md)
+5. [Experimental Setup](04_Experimental_Setup.md)
+6. [Results and Analysis](05_Results_and_Analysis.md)
+7. [Discussion](06_Discussion.md)
+8. [Conclusion](07_Conclusion.md)
 
-1.  **[Abstract](00_Abstract.md)** – A high-level summary of findings and methodology.
-2.  **[Introduction](01_Introduction.md)** – Objectives and motivations for the study.
-3.  **[Background and Related Work](02_Background.md)** – Theoretical differences in language architectures.
-4.  **[Methodology](03_Methodology.md)** – Algorithms, datasets, and measurement metrics.
-5.  **[Experimental Setup](04_Experimental_Setup.md)** – Execution environment and instrumentation.
-6.  **[Results and Analysis](05_Results_and_Analysis.md)** – Deep dive into benchmarking data and visualizations.
-7.  **[Discussion](06_Discussion.md)** – Interpretation of overheads and performance drivers.
-8.  **[Conclusion](07_Conclusion.md)** – Summary of findings and future directions.
+The important repo artifacts referenced by the report are:
 
----
-*Author: Ali Alfridawi*
-*Institution: University of Texas at Arlington*
+- `data/benchmark_inputs/manifest.csv`
+- `results/data/benchmark_runs.csv`
+- `results/data/benchmark_summary.csv`
+- `results/graphs/*.png`

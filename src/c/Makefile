@@ -22,4 +22,4 @@ test: test_algorithms
 	./test_algorithms
 
 clean:
-	rm -f test_algorithms benchmark *.o
+	rm -f test_algorithms test_algorithms.exe benchmark benchmark.exe *.o

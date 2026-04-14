@@ -1,10 +1,13 @@
-# II. Background and Related Work
+# II. Background
 
-### A. Compiled Languages (C)
-C is a statically typed, compiled language that provides low-level memory access and minimal runtime abstraction. Compilers like GCC apply aggressive optimizations (e.g., `-O2`), resulting in code that maps closely to machine instructions.
+## A. C
 
-### B. JIT-Compiled Languages (Java)
-Java employs a bytecode-based execution model. The Java Virtual Machine (JVM) uses a Just-In-Time (JIT) compiler to translate bytecode into native machine code at runtime. This allows for profile-guided optimizations but introduces a "warm-up" period where performance may be suboptimal.
+C offers low-level control, direct array access, and minimal runtime abstraction. In a benchmark like this, that usually translates to small constant factors and predictable execution behavior.
 
-### C. Interpreted Languages (Python)
-Python is a dynamically typed, interpreted language. The standard implementation (CPython) executes code on a virtual machine by interpreting bytecode line-by-line. While this offers high flexibility and developer productivity, it introduces significant overhead for computational tasks.
+## B. Java
+
+Java executes on the JVM and can apply runtime optimizations after code has been exercised. That makes warm-up policy important. If the benchmark launches a new JVM for every sample and never warms it up, conclusions about steady-state Java performance are weak.
+
+## C. Python
+
+CPython prioritizes flexibility and developer speed over raw loop throughput. For small algorithm kernels, interpreter overhead often dominates the measured runtime even when the comparison counts match a lower-level implementation.

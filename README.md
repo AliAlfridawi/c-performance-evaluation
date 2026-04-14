@@ -1,100 +1,66 @@
-# Algorithmic Benchmarking Suite: C vs. Java vs. Python
+# Cross-Language Algorithm Benchmarking: C vs. Java vs. Python
 
-![Status: Completed](https://img.shields.io/badge/Status-Completed-success)
-![Course: CSE 1320](https://img.shields.io/badge/Course-CSE%201320%20Honors-blue)
-![Institution: UTA](https://img.shields.io/badge/Institution-University%20of%20Texas%20at%20Arlington-orange)
+This repository is a reproducible benchmarking project for three baseline algorithms implemented in C, Java, and Python:
 
-## Abstract
-This study presents a comprehensive benchmarking of three fundamental computer science algorithms—**Quick Sort**, **Linear Search**, and **Binary Search**—across three distinct programming language architectures: **C** (compiled), **Java** (JIT-compiled), and **Python** (interpreted). By utilizing both hardware-dependent metrics (execution time) and hardware-independent metrics (comparison counts) across datasets ranging from $N=10$ to $N=5000$, we quantify the performance disparities inherent in each language's execution model. Our findings indicate that while hardware-independent metrics remain theoretically consistent for deterministic inputs, raw execution time varies by orders of magnitude. C exhibits the highest efficiency, while Python demonstrates significant overhead, particularly in large-scale sorting tasks. Java bridges the gap, showing high throughput after initial JVM warm-up.
+- Quick sort
+- Linear search
+- Binary search
 
-## I. Methodology & Experimental Setup
+The focus is not just "which language is fastest," but whether the benchmark protocol is defensible. The current version fixes the earlier methodological gaps by using shared on-disk datasets, explicit search cases, warm-up trials, repeated measurements, and raw trial data.
 
-### A. Performance Metrics
-To ensure a rigorous and objective comparison, the benchmarking methodology relies on two distinct metrics:
-1.  **Hardware-Dependent Metric (Execution Time):** Measured in wall-clock time using high-resolution timers (`clock()` in C, `System.nanoTime()` in Java, and `time.perf_counter()` in Python) to isolate the raw computational speed and language overhead.
-2.  **Hardware-Independent Metric (Comparison Count):** A metric that tracks the absolute number of fundamental operations performed, ensuring theoretical algorithmic complexity remains constant across all implementations for deterministic inputs.
+## What This Project Demonstrates
 
-### B. Algorithms & Data Distributions
-The performance of each language is evaluated across both sorting and searching paradigms:
-*   **Quick Sort:** Evaluated across random, ascending, and descending distributions to capture Average, Best, and Worst Case scenarios.
-*   **Linear Search:** A sequential search algorithm representing $O(N)$ complexity.
-*   **Binary Search:** A logarithmic search algorithm representing $O(\log N)$ complexity on sorted data.
+- Cross-language algorithm implementations with matching comparison-count semantics
+- A benchmark harness that separates raw trial capture from summary plotting
+- Shared deterministic inputs consumed by all three language runners
+- A small research-style workflow: collect data, summarize medians, document limitations
 
-Tests were executed across varying input sizes ($N=10$ to $N=5000$) to evaluate performance scaling.
+## Benchmark Design
 
-## II. Empirical Results & Analysis
+- Shared inputs live in `data/benchmark_inputs/` and are listed in `data/benchmark_inputs/manifest.csv`.
+- Inputs use unique integers so search hit cases are unambiguous across languages.
+- Quick sort is tested on `random`, `ascending`, and `descending` inputs.
+- Linear search and binary search are tested on `ascending` inputs with `first_hit`, `middle_hit`, `last_hit`, and `miss` cases.
+- Each configuration runs `5` warm-up trials and `20` measured trials.
+- Very small workloads are batched until at least `0.5 ms` of total timed work is collected, then normalized back to per-run timing.
+- Raw rows are written to `results/data/benchmark_runs.csv`; median summaries are written to `results/data/benchmark_summary.csv`.
 
-### A. Execution Time Trends
-The disparity in execution time is most evident in the Quick Sort algorithm as $N$ increases. As seen in Fig 1, the compiled nature of C provides a massive advantage, while Python's interpreted overhead leads to significantly higher execution times, especially at scale.
+## Key Findings
 
-![Cross Language Time](results/graphs/cross_time_vs_n_faceted.png)
-*Fig 1. Execution time across languages for varied distributions.*
+- Comparison counts align across all three languages for every published configuration, which confirms the shared-input protocol is working as intended.
+- For quick sort at `N=5000` on random input, the median per-run times are about `0.000132 s` in C, `0.000316 s` in Java, and `0.012126 s` in Python.
+- For quick sort at `N=5000`, Java is about `2.39x` slower than C on random input, while Python is about `91.6x` slower than C.
+- Linear search behaves exactly as the search case predicts: `first_hit` stays near one comparison, while `last_hit` and `miss` reach `5000` comparisons at `N=5000`.
+- Binary search stays near logarithmic behavior: at `N=5000`, the comparison count ranges from `23` to `26` depending on the search case.
 
-### B. Speedup relative to C
-Using C as the baseline for maximum efficiency, Fig 2 highlights how Java's performance approaches C as the dataset size increases, likely due to JIT optimizations and high throughput. Python, conversely, remains consistently several orders of magnitude slower.
+## Reproduce
 
-![Speedup vs C](results/graphs/cross_speedup_vs_c.png)
-*Fig 2. Speedup of Java and Python relative to C.*
+1. Build the native and JVM targets:
+   - `cd src/c && mingw32-make all`
+   - `mvn -q -DskipTests compile`
+2. Run correctness tests:
+   - `cd src/c && mingw32-make test`
+   - `mvn test`
+   - `cd src/python && python -m unittest test_algorithms.py`
+3. Regenerate shared inputs:
+   - `python data/DataSetGenerator.py`
+4. Collect raw trials:
+   - `python scripts/collect_benchmarks.py`
+5. Generate summary CSVs and plots:
+   - `python scripts/plot_benchmarks.py`
 
-### C. Sorting Distribution Effects
-Python shows extreme sensitivity to pre-sorted data when using a standard Quick Sort implementation. Fig 3 illustrates the significant performance penalty Python incurs in worst-case scenarios (e.g., ascending/descending data), where execution time scales poorly compared to the more optimized C and Java implementations.
+## Results
 
-![Distribution Effect Quicksort Python](results/graphs/dist_effect_quicksort_python.png)
-*Fig 3. Sensitivity of Python Quick Sort to input distribution.*
+![Quick sort timing](results/graphs/quicksort_median_time.png)
 
-> [!TIP]
-> **Full Research Report:** For a detailed deep dive into the methodology, experimental setup, and granular data analysis, please see our modular [IEEE Research Paper Index](docs/index.md).
+![Linear search timing](results/graphs/linear_search_median_time.png)
 
----
+![Binary search timing](results/graphs/binary_search_median_time.png)
 
-## III. Repository Structure & Reproduction
+## Limitations
 
-### A. Directory Structure
-```text
-├── /src
-│   ├── /c          # C source files (C11, Makefile)
-│   ├── /java       # Java source files (JDK 17+, Maven)
-│   └── /python     # Python scripts (3.10+)
-├── /data           # Dataset generation scripts
-├── /results        # Output CSVs and generated performance graphs
-├── /docs           # Formal IEEE research paper drafts
-└── README.md
-```
+- Results come from one Windows 11 machine and should not be treated as a universal language ranking.
+- Each benchmark configuration is launched as a separate process, so runtime startup costs remain part of the observed overhead.
+- The project tracks execution time and comparison counts, not memory usage, cache effects, or CPU affinity controls.
 
-### B. Compiling & Running Benchmarks
-
-#### C Implementation
-Requires a C11 compiler (GCC, Clang, or MSVC) and `make`.
-```bash
-cd src/c
-make
-./benchmark quicksort random 1000 --seed 42
-```
-
-#### Java Implementation
-Requires JDK 17+ and Apache Maven.
-```bash
-mvn compile
-mvn -q exec:java -Dexec.args="quicksort random 1000 --seed 42"
-```
-
-#### Python Implementation
-Requires Python 3.10+.
-```bash
-python src/python/benchmark.py quicksort random 1000 --seed 42
-```
-
-### C. Data Collection & Visualization
-1. Install plotting dependencies: `pip install -r requirements.txt`
-2. Collect timings from all languages:
-   ```bash
-   python scripts/collect_benchmarks.py
-   ```
-3. Generate performance graphs:
-   ```bash
-   python scripts/plot_benchmarks.py
-   ```
-
----
-*Author: Ali Alfridawi*
-*Research Conducted for CSE 1320 Honors Project, University of Texas at Arlington.*
+The supporting report lives in [docs/index.md](docs/index.md).

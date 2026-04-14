@@ -39,6 +39,25 @@ public final class Algorithms {
     }
 
     private static int partition(int[] arr, int low, int high) {
+        int mid = low + (high - low) / 2;
+
+        /* Median of Three (low, mid, high) */
+        inc();
+        if (arr[mid] < arr[low]) {
+            swap(arr, mid, low);
+        }
+        inc();
+        if (arr[high] < arr[low]) {
+            swap(arr, high, low);
+        }
+        inc();
+        if (arr[high] < arr[mid]) {
+            swap(arr, high, mid);
+        }
+
+        /* Move median (mid) to high as the Lomuto pivot */
+        swap(arr, mid, high);
+
         int pivot = arr[high];
         int i = low - 1;
         for (int j = low; j < high; j++) {

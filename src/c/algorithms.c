@@ -18,20 +18,47 @@ void quick_sort(int *arr, size_t n) {
 }
 
 static ptrdiff_t partition(int *arr, ptrdiff_t low, ptrdiff_t high) {
+    ptrdiff_t mid = low + (high - low) / 2;
+
+    /* Median of Three (low, mid, high) */
+    inc();
+    if (arr[mid] < arr[low]) {
+        int t = arr[mid];
+        arr[mid] = arr[low];
+        arr[low] = t;
+    }
+    inc();
+    if (arr[high] < arr[low]) {
+        int t = arr[high];
+        arr[high] = arr[low];
+        arr[low] = t;
+    }
+    inc();
+    if (arr[high] < arr[mid]) {
+        int t = arr[high];
+        arr[high] = arr[mid];
+        arr[mid] = t;
+    }
+
+    /* Move median (mid) to high as the Lomuto pivot */
+    int t = arr[mid];
+    arr[mid] = arr[high];
+    arr[high] = t;
+
     int pivot = arr[high];
     ptrdiff_t i = low - 1;
     for (ptrdiff_t j = low; j < high; j++) {
         inc();
         if (arr[j] <= pivot) {
             i++;
-            int t = arr[i];
+            int temp = arr[i];
             arr[i] = arr[j];
-            arr[j] = t;
+            arr[j] = temp;
         }
     }
-    int t = arr[i + 1];
+    int temp = arr[i + 1];
     arr[i + 1] = arr[high];
-    arr[high] = t;
+    arr[high] = temp;
     return i + 1;
 }
 

@@ -1,13 +1,21 @@
 # IV. Experimental Setup
 
-The benchmarks were executed in a controlled environment to minimize external interference.
+The benchmark was regenerated on a Windows x86_64 machine with the following local toolchain:
 
-### A. Environment
-- **Compiler/Runtime:**
-    - C: GCC 11.0+ (C11 standard) with `-O2` optimization.
-    - Java: OpenJDK 17 (Temurin) with Maven-driven execution.
-    - Python: CPython 3.10+ with standard library implementations.
-- **System:** x86_64 architecture (Win32).
+- GCC `15.2.0`
+- Apache Maven `3.9.14`
+- Eclipse Adoptium Java `17.0.18`
+- Python `3.11.9`
+- OS: Windows 11 (`amd64`)
 
-### B. Instrumentation
-All implementations were modified to include a global or object-scoped comparison counter. Timing was measured only for the core algorithmic execution, excluding dataset generation and I/O overhead.
+Repository tooling:
+
+- C sources are built from `src/c/` with `mingw32-make`
+- Java sources are compiled from `src/java/` through Maven
+- Python benchmarking and plotting scripts run from the repository root
+
+Artifacts produced by the workflow:
+
+- Raw trials: `results/data/benchmark_runs.csv`
+- Median summary: `results/data/benchmark_summary.csv`
+- Plots: `results/graphs/quicksort_median_time.png`, `linear_search_median_time.png`, `binary_search_median_time.png`, and `comparison_counts.png`

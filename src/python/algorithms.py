@@ -40,6 +40,22 @@ def _quick_sort_range(arr: MutableSequence[int], low: int, high: int) -> None:
 
 
 def _partition(arr: MutableSequence[int], low: int, high: int) -> int:
+    mid = low + (high - low) // 2
+
+    # Median of Three (low, mid, high)
+    _inc()
+    if arr[mid] < arr[low]:
+        arr[mid], arr[low] = arr[low], arr[mid]
+    _inc()
+    if arr[high] < arr[low]:
+        arr[high], arr[low] = arr[low], arr[high]
+    _inc()
+    if arr[high] < arr[mid]:
+        arr[high], arr[mid] = arr[mid], arr[high]
+
+    # Move median (mid) to high as the Lomuto pivot
+    arr[mid], arr[high] = arr[high], arr[mid]
+
     pivot = arr[high]
     i = low - 1
     for j in range(low, high):

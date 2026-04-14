@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# C build outputs
+src/c/*.o
+src/c/*.exe
+src/c/benchmark
+src/c/test_algorithms
+
+# Java / Maven
+target/
+
+# Local benchmark smoke outputs
+results/data/smoke_*.csv
+results/graphs/smoke/

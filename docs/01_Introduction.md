@@ -1,5 +1,9 @@
 # I. Introduction
 
-The efficiency of an algorithm is often discussed in theoretical terms using Big O notation. However, the practical execution speed of these algorithms is heavily influenced by the underlying language architecture and runtime environment. In this research, we evaluate the performance of three popular languages—C, Java, and Python—to understand how compilation models (ahead-of-time vs. just-in-time vs. interpretation) impact the real-world performance of fundamental sorting and searching operations.
+Algorithm analysis usually starts with asymptotic complexity, but real software runs inside toolchains and runtimes with different overhead models. This project compares the same core algorithms in three environments:
 
-The study aims to provide empirical data to answer a critical question: *To what extent does language overhead negate algorithmic optimizations in small vs. large-scale data processing?*
+- C with ahead-of-time native compilation
+- Java on the JVM
+- Python on CPython
+
+The goal is not to produce a universal ranking of languages. The goal is to build a small, reproducible benchmark harness that keeps the algorithmic workload constant and makes the measurement tradeoffs explicit. That makes the project useful both as a systems/performance exercise and as a portfolio example of how to turn an experiment into something a reviewer can trust.
