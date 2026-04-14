@@ -21,7 +21,7 @@ Distribution = Literal["random", "ascending", "descending"]
 Algorithm = Literal["quicksort", "linear_search", "binary_search"]
 SearchCase = Literal["sort", "first_hit", "middle_hit", "last_hit", "miss"]
 
-MIN_BATCH_TIME_NS = 500_000
+MIN_BATCH_TIME_NS = 50_000_000
 
 
 def build_array(n: int, distribution: Distribution, seed: int) -> list[int]:

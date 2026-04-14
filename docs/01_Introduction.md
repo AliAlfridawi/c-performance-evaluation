@@ -6,4 +6,4 @@ Algorithm analysis usually starts with asymptotic complexity, but real software 
 - Java on the JVM
 - Python on CPython
 
-The goal is not to produce a universal ranking of languages. The goal is to build a small, reproducible benchmark harness that keeps the algorithmic workload constant and makes the measurement tradeoffs explicit. That makes the project useful both as a systems/performance exercise and as a portfolio example of how to turn an experiment into something a reviewer can trust.
+The goal is not to produce a universal ranking of languages. The goal is to build a small, reproducible benchmark harness that keeps the algorithmic workload constant and makes the measurement tradeoffs explicit. This allows for a structured exploration of how language-specific abstractions and runtime environments influence the observed performance of fundamental algorithms.

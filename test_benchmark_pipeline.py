@@ -1,4 +1,5 @@
 import sys
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -90,11 +91,15 @@ class CollectorValidationTests(unittest.TestCase):
 
             pb.run_all(raw_csv, summary_csv, graph_dir, strict=True)
 
+            summary_text = summary_csv.read_text(encoding="utf-8")
             self.assertTrue(summary_csv.is_file())
+            self.assertIn("std_seconds", summary_text.splitlines()[0])
             self.assertTrue((graph_dir / "quicksort_median_time.png").is_file())
             self.assertTrue((graph_dir / "linear_search_median_time.png").is_file())
             self.assertTrue((graph_dir / "binary_search_median_time.png").is_file())
             self.assertTrue((graph_dir / "comparison_counts.png").is_file())
+            self.assertTrue((graph_dir / "timing_overview.png").is_file())
+            self.assertTrue((graph_dir / "timing_speedup_vs_c.png").is_file())
 
 
 class PlotValidationTests(unittest.TestCase):
@@ -108,6 +113,45 @@ class PlotValidationTests(unittest.TestCase):
 
             with self.assertRaises(pb.SummaryValidationError):
                 pb.validate_trials(trials, strict=True)
+
+
+class RunnerValidationTests(unittest.TestCase):
+    @unittest.skipUnless(cb.find_c_benchmark(), "requires C benchmark")
+    def test_c_runner_invalid_args(self) -> None:
+        exe = cb.find_c_benchmark()
+        # Invalid N
+        res = subprocess.run([str(exe), "quicksort", "random", "-1"], capture_output=True, text=True)
+        self.assertNotEqual(res.returncode, 0)
+        self.assertEqual(res.stdout.strip(), "")
+        # Invalid search case
+        res = subprocess.run([str(exe), "linear_search", "ascending", "10", "--search-case", "banana"], capture_output=True, text=True)
+        self.assertNotEqual(res.returncode, 0)
+        self.assertEqual(res.stdout.strip(), "")
+
+    def test_python_runner_invalid_args(self) -> None:
+        exe = sys.executable
+        script = REPO_ROOT / "src" / "python" / "benchmark.py"
+        # Invalid N
+        res = subprocess.run([exe, str(script), "quicksort", "random", "-1"], capture_output=True, text=True)
+        self.assertNotEqual(res.returncode, 0)
+        self.assertEqual(res.stdout.strip(), "")
+        # Invalid search case
+        res = subprocess.run([exe, str(script), "linear_search", "ascending", "10", "--search-case", "banana"], capture_output=True, text=True)
+        self.assertNotEqual(res.returncode, 0)
+        self.assertEqual(res.stdout.strip(), "")
+
+    @unittest.skipUnless(cb.find_java_executable() and cb.find_java_classes_dir(), "requires Java benchmark")
+    def test_java_runner_invalid_args(self) -> None:
+        exe = cb.find_java_executable()
+        classes = cb.find_java_classes_dir()
+        # Invalid N
+        res = subprocess.run([str(exe), "-cp", str(classes), "bench.Benchmark", "quicksort", "random", "-1"], capture_output=True, text=True)
+        self.assertNotEqual(res.returncode, 0)
+        self.assertEqual(res.stdout.strip(), "")
+        # Invalid search case
+        res = subprocess.run([str(exe), "-cp", str(classes), "bench.Benchmark", "linear_search", "ascending", "10", "--search-case", "banana"], capture_output=True, text=True)
+        self.assertNotEqual(res.returncode, 0)
+        self.assertEqual(res.stdout.strip(), "")
 
 
 if __name__ == "__main__":

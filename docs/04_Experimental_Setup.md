@@ -18,4 +18,4 @@ Artifacts produced by the workflow:
 
 - Raw trials: `results/data/benchmark_runs.csv`
 - Median summary: `results/data/benchmark_summary.csv`
-- Plots: `results/graphs/quicksort_median_time.png`, `linear_search_median_time.png`, `binary_search_median_time.png`, and `comparison_counts.png`
+- Plots: `results/graphs/quicksort_median_time.png`, `linear_search_median_time.png`, `binary_search_median_time.png`, `comparison_counts.png`, `timing_overview.png`, and `timing_speedup_vs_c.png`

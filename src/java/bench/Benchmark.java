@@ -11,7 +11,7 @@ import java.util.Random;
  */
 public final class Benchmark {
 
-    private static final long MIN_BATCH_TIME_NS = 500_000L;
+    private static final long MIN_BATCH_TIME_NS = 50_000_000L;
 
     private Benchmark() {}
 
@@ -305,8 +305,16 @@ public final class Benchmark {
             if ("quicksort".equals(algorithm) && !"sort".equals(searchCase)) {
                 throw new IllegalArgumentException("quicksort only supports --search-case sort");
             }
-            if (!"quicksort".equals(algorithm) && "sort".equals(searchCase)) {
-                throw new IllegalArgumentException("search algorithms require a hit/miss search case");
+            if (!"quicksort".equals(algorithm)) {
+                if ("sort".equals(searchCase)) {
+                    throw new IllegalArgumentException("search algorithms require a hit/miss search case");
+                }
+                if (!"first_hit".equals(searchCase)
+                        && !"middle_hit".equals(searchCase)
+                        && !"last_hit".equals(searchCase)
+                        && !"miss".equals(searchCase)) {
+                    throw new IllegalArgumentException("unsupported search case: " + searchCase);
+                }
             }
 
             return new Config(algorithm, distribution, n, seed, inputFile, trials, warmup, searchCase);

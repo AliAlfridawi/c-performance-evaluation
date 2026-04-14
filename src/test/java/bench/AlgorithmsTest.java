@@ -29,7 +29,7 @@ class AlgorithmsTest {
     }
 
     @Test
-    void quickSortN10FromDataSets() {
+    void quickSortRegressionN10() {
         int[] a = {73, 21, 56, 89, 12, 45, 98, 34, 67, 4};
         int[] expected = {4, 12, 21, 34, 45, 56, 67, 73, 89, 98};
         Algorithms.quickSort(a);

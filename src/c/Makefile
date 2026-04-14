@@ -4,6 +4,12 @@
 CC ?= gcc
 CFLAGS = -std=c11 -Wall -Wextra -O2
 
+ifeq ($(OS),Windows_NT)
+RM_CMD = del /Q /F
+else
+RM_CMD = rm -f
+endif
+
 .PHONY: all clean test bench
 
 all: test_algorithms benchmark
@@ -22,4 +28,4 @@ test: test_algorithms
 	./test_algorithms
 
 clean:
-	rm -f test_algorithms test_algorithms.exe benchmark benchmark.exe *.o
+	$(RM_CMD) test_algorithms test_algorithms.exe benchmark benchmark.exe *.o

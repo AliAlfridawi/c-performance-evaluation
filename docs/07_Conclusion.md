@@ -1,6 +1,6 @@
 # VII. Conclusion
 
-The repository is now in a better state for both technical review and recruiter review. The code, CSVs, plots, and documentation all describe the same experiment, and the main claims are limited to what the regenerated evidence supports.
+The experiment provides a baseline for a small-scale, multi-language benchmark suite. The code, datasets, and analysis align to provide a consistent view of performance under the defined conditions.
 
 The benchmark shows three clear patterns:
 
@@ -8,4 +8,4 @@ The benchmark shows three clear patterns:
 - large differences in observed in-process execution time under this harness
 - search behavior that depends strongly on the exact lookup case being measured
 
-Future improvements could add memory metrics, CPU affinity controls, or extra languages such as Rust or Go, but the current version is already a reproducible baseline for this repository-level harness.
+This demonstrates that while algorithms define the theoretical behavior, runtime environments significantly influence the observed performance, even when the underlying work is constant.

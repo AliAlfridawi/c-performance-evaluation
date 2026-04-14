@@ -22,7 +22,7 @@ static void test_quicksort_reverse(void) {
     assert(a[0] == 1 && a[1] == 2 && a[2] == 3 && a[3] == 4);
 }
 
-static void test_quicksort_n10(void) {
+static void test_quicksort_regression_n10(void) {
     int a[] = {73, 21, 56, 89, 12, 45, 98, 34, 67, 4};
     int expect[] = {4, 12, 21, 34, 45, 56, 67, 73, 89, 98};
     quick_sort(a, 10);
@@ -51,7 +51,7 @@ int main(void) {
     test_quicksort_empty();
     test_quicksort_single();
     test_quicksort_reverse();
-    test_quicksort_n10();
+    test_quicksort_regression_n10();
     test_linear();
     test_binary();
     return 0;

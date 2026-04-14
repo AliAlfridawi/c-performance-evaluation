@@ -2,12 +2,12 @@
 
 ## A. C
 
-C offers low-level control, direct array access, and minimal runtime abstraction. In a benchmark like this, that usually translates to small constant factors and predictable execution behavior.
+C serves as the unmanaged native baseline in this repository. Because it compiles ahead of time and exposes arrays without a managed runtime layer, it is useful for observing how much overhead remains once the algorithmic work is held constant [1][3].
 
 ## B. Java
 
-Java executes on the JVM and can apply runtime optimizations after code has been exercised. That makes warm-up policy important. If the benchmark launches a new JVM for every sample and never warms it up, conclusions about steady-state Java performance are weak.
+Java executes on the JVM and can apply runtime optimizations after code has been exercised. That makes warm-up policy important. If the benchmark launches a new JVM for every sample and never warms it up, conclusions about steady-state Java performance are weak [2][3].
 
 ## C. Python
 
-CPython prioritizes flexibility and developer speed over raw loop throughput. For small algorithm kernels, interpreter overhead often dominates the measured runtime even when the comparison counts match a lower-level implementation.
+This project measures CPython, the original and most widely used implementation of Python, written in C [4]. Because Python remains interpreted and dynamically typed, small algorithm kernels can expose more runtime overhead than comparable native or JIT-compiled loops even when the comparison counts match [1][3][4].

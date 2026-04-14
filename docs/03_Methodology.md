@@ -33,12 +33,12 @@ For binary search, sorting is treated as input preparation and is not included i
 - `comparisons`: hardware-independent work performed by the algorithm
 - `elapsed_ns`: in-process execution time measured immediately around the algorithm call
 
-Timing excludes process startup, argument parsing, input loading, and binary-search presorting. Very small workloads are batched until at least `0.5 ms` of total work has been measured. Reported timing is then normalized back to seconds per run.
+Timing excludes process startup, argument parsing, input loading, and binary-search presorting. Python uses `time.perf_counter_ns()` [5], Java uses `System.nanoTime()` [6], and the Windows C build uses `QueryPerformanceCounter` [7]. Very small workloads are batched until at least `50 ms` of total work has been measured. This threshold was selected to reduce the impact of timer resolution and call overhead on micro-scale measurements [1][3]. Reported timing is then normalized back to seconds per run.
 
 ## E. Trial Policy
 
 - `5` warm-up trials per configuration
 - `20` measured trials per configuration
-- Published summaries use the median of measured trials
-- Min/max bands are preserved to show spread
-- The warm-up policy provides a practical JVM baseline, but it is not intended to establish steady-state Java performance
+- Published summaries use the median of measured trials, as the median is more robust than the mean against transient OS interruptions [2]
+- Min/max bands are preserved to show spread, and per-group standard deviation is written to the summary CSV for additional context
+- The warm-up policy provides a practical JVM baseline, but it is not intended to establish steady-state Java performance [3]

@@ -12,9 +12,9 @@ from algorithms import (
 )
 
 
-# N=10 random from data/DataSets.md (Average Case)
-DATASETS_N10_RANDOM = [73, 21, 56, 89, 12, 45, 98, 34, 67, 4]
-DATASETS_N10_SORTED = [4, 12, 21, 34, 45, 56, 67, 73, 89, 98]
+# Standalone regression cases (N=10)
+REGRESSION_N10_RANDOM = [73, 21, 56, 89, 12, 45, 98, 34, 67, 4]
+REGRESSION_N10_SORTED = [4, 12, 21, 34, 45, 56, 67, 73, 89, 98]
 
 
 class TestQuickSort(unittest.TestCase):
@@ -40,10 +40,10 @@ class TestQuickSort(unittest.TestCase):
         quick_sort(a)
         self.assertEqual(a, [1, 2, 3, 4])
 
-    def test_datasets_n10_random(self) -> None:
-        a = copy.copy(DATASETS_N10_RANDOM)
+    def test_regression_n10_random(self) -> None:
+        a = copy.copy(REGRESSION_N10_RANDOM)
         quick_sort(a)
-        self.assertEqual(a, DATASETS_N10_SORTED)
+        self.assertEqual(a, REGRESSION_N10_SORTED)
 
 
 class TestLinearSearch(unittest.TestCase):

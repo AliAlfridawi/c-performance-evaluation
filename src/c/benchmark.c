@@ -17,7 +17,7 @@
 
 #include "algorithms.h"
 
-#define MIN_BATCH_TIME_NS 500000ULL
+#define MIN_BATCH_TIME_NS 50000000ULL
 
 typedef struct {
     const char *algorithm;
@@ -34,9 +34,14 @@ typedef struct {
 
 static uint64_t get_time_ns(void) {
 #ifdef _WIN32
-    LARGE_INTEGER freq, counter;
-    QueryPerformanceFrequency(&freq);
-    QueryPerformanceCounter(&counter);
+    static LARGE_INTEGER freq = {0};
+    LARGE_INTEGER counter;
+    if (freq.QuadPart == 0 && !QueryPerformanceFrequency(&freq)) {
+        return 0;
+    }
+    if (!QueryPerformanceCounter(&counter)) {
+        return 0;
+    }
     return (uint64_t)((counter.QuadPart * 1000000000LL) / freq.QuadPart);
 #else
     struct timespec ts;
@@ -173,7 +178,11 @@ static int parse_config(int argc, char **argv, BenchConfig *cfg) {
     memset(cfg, 0, sizeof(*cfg));
     cfg->algorithm = argv[1];
     cfg->distribution = argv[2];
-    cfg->n = (size_t)strtoul(argv[3], NULL, 10);
+    int temp_n = 0;
+    if (!parse_non_negative_int(argv[3], "N", &temp_n)) {
+        return 0;
+    }
+    cfg->n = (size_t)temp_n;
     cfg->seed = 42U;
     cfg->trials = 1;
     cfg->warmup = 0;
@@ -228,9 +237,18 @@ static int parse_config(int argc, char **argv, BenchConfig *cfg) {
         fprintf(stderr, "error: quicksort only supports --search-case sort\n");
         return 0;
     }
-    if (!compare_str(cfg->algorithm, "quicksort") && compare_str(cfg->search_case, "sort")) {
-        fprintf(stderr, "error: search algorithms require a hit/miss search case\n");
-        return 0;
+    if (!compare_str(cfg->algorithm, "quicksort")) {
+        if (compare_str(cfg->search_case, "sort")) {
+            fprintf(stderr, "error: search algorithms require a hit/miss search case\n");
+            return 0;
+        }
+        if (!compare_str(cfg->search_case, "first_hit") &&
+            !compare_str(cfg->search_case, "middle_hit") &&
+            !compare_str(cfg->search_case, "last_hit") &&
+            !compare_str(cfg->search_case, "miss")) {
+            fprintf(stderr, "error: unsupported search case: %s\n", cfg->search_case);
+            return 0;
+        }
     }
 
     return 1;

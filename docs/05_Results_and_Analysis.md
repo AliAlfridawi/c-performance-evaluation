@@ -6,9 +6,9 @@
 
 Comparison counts match across languages for every quick sort configuration, so the timing gaps reflect observed in-process execution cost under this harness rather than mismatched work. At `N=5000` on random input:
 
-- C median: `0.000132 s`
-- Java median: `0.000316 s`
-- Python median: `0.012126 s`
+- C median: `0.000098 s`
+- Java median: `0.000152 s`
+- Python median: `0.012475 s`
 
 The current median-of-three partition logic also changes the sorted-input behavior relative to the older CSVs that were still checked into the repository. Java also shows visibly wider min-max bands than C for several configurations, so the Java medians should be interpreted as harness-specific observations rather than steady-state JVM claims.
 
@@ -35,3 +35,11 @@ Binary search remains logarithmic in comparison count. At `N=5000`, the search c
 ![Comparison counts](../results/graphs/comparison_counts.png)
 
 The summary CSV shows no comparison-count mismatches across languages for any published configuration. That is the strongest evidence that the shared-input protocol is working, because the collection pipeline now fails instead of silently publishing incomplete or inconsistent groups.
+
+## E. Publication Summary Views
+
+![Timing overview](../results/graphs/timing_overview.png)
+
+![Relative timing vs C](../results/graphs/timing_speedup_vs_c.png)
+
+The publication-style timing overview condenses the full timing surface into one cleaner figure for report use, while the normalized timing figure shows how Java and Python move relative to the C baseline across the same workloads. In the normalized figure, `1.0x` indicates parity with C and values above `1.0x` indicate slower median in-process timing than C.
