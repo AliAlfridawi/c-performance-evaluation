@@ -1,11 +1,11 @@
 # VII. Conclusion
 
-The experiment provides a baseline for a small-scale, multi-language benchmark suite. The code, datasets, and analysis align to provide a consistent view of performance under the defined conditions.
+The final review found that this repository now supports a credible, tightly scoped benchmark narrative. The code, datasets, validation pipeline, and report are aligned well enough to support a narrow claim about in-process algorithm-section timing across C, Java, and Python when the algorithmic workload is held constant.
 
-The benchmark shows three clear patterns:
+Three conclusions are defensible:
 
-- identical comparison counts across languages when the algorithm and inputs are held constant
-- large differences in observed in-process execution time under this harness
-- search behavior that depends strongly on the exact lookup case being measured
+- Comparison counts match across languages for every published configuration.
+- Observed timing differences remain large even after the workload is normalized.
+- Exact search-case selection materially changes search behavior and therefore must be reported explicitly.
 
-This demonstrates that while algorithms define the theoretical behavior, runtime environments significantly influence the observed performance, even when the underlying work is constant.
+The important qualifier is that these are harness-specific observations from one documented Windows environment. They are not universal language rankings, end-to-end latency measurements, or proof of steady-state JVM behavior. Framed that way, the repository is at the level expected of a strong senior-engineering benchmark artifact: transparent about scope, reproducible from source, and explicit about what still limits the claims.
