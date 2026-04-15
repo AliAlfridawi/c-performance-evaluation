@@ -15,9 +15,10 @@
 | Measured trials | `20` measured trials per configuration |
 | Micro-scale mitigation | Repeat execution until at least `50 ms` total timed work per trial |
 | Primary statistic | Median seconds per run |
+| Uncertainty summaries | Q1/Q3, IQR, min/max, standard deviation, and `95%` bootstrap CI for the median |
 | Workload control | Shared inputs plus comparison-count parity across languages |
 
-This contract is strict by design. If any expected language/case group is missing or the comparison counts disagree across languages, the collection pipeline fails instead of silently publishing partial data.
+This contract is enforced rather than merely described. If any expected language-case group is missing or if comparison counts disagree across languages for a published case, the collection and summary pipeline fails instead of silently accepting partial data.
 
 ## B. Shared Inputs and Workload Control
 
@@ -29,9 +30,9 @@ The datasets use unique integers:
 - `descending`: `N-1..0`
 - `random`: a deterministic shuffle of `0..N-1`
 
-Using shared files removes language-specific PRNG differences from the published runs and makes search hit cases unambiguous. The benchmark also records `comparisons`, which count scalar comparisons inside the algorithm implementation. That metric is the workload-control mechanism for this experiment: if comparison counts match across languages for a given case, the harness has strong evidence that it timed equivalent algorithmic work.
+Using shared files removes language-specific PRNG differences from the published runs and keeps search cases unambiguous. The benchmark also records `comparisons`, the number of scalar comparisons performed inside each algorithm implementation. That metric is the workload-control variable for this experiment: if comparison counts match across languages for a given case, the harness has strong evidence that it timed equivalent algorithmic work.
 
-Comparison parity is necessary but not sufficient for full runtime comparability. It does not normalize memory layout, interpreter dispatch, JIT compilation, allocation behavior, cache locality, or other runtime services. The method therefore supports narrow in-process claims, not a claim of total runtime fairness.
+Comparison parity does not imply total runtime equivalence. It does not normalize memory layout, interpreter dispatch, JIT compilation, allocation behavior, or cache effects. The method therefore supports narrow in-process claims rather than a claim of complete execution fairness.
 
 ## C. Workloads
 
@@ -39,7 +40,7 @@ Comparison parity is necessary but not sufficient for full runtime comparability
 - Linear search is evaluated on `ascending` inputs with `first_hit`, `middle_hit`, `last_hit`, and `miss`.
 - Binary search is evaluated on sorted inputs with the same four search cases.
 
-For binary search, sorting is treated as input preparation and is excluded from the timed region. That is a deliberate choice: the benchmark is measuring search over a prepared sorted array, not the cost of turning arbitrary data into searchable data.
+For binary search, sorting is treated as input preparation and is excluded from the timed region. That is a deliberate construct choice: the benchmark measures search over a prepared sorted array, not the cost of turning arbitrary data into searchable data.
 
 ## D. Metrics and Timing Boundary
 
@@ -48,26 +49,39 @@ For binary search, sorting is treated as input preparation and is excluded from 
 
 Timing excludes process startup, argument parsing, input loading, and binary-search presorting. Python uses `time.perf_counter_ns()` [6], Java uses `System.nanoTime()` [7], and the C implementation uses `QueryPerformanceCounter` on Windows [8].
 
-Very small workloads are batched until at least `50 ms` of total timed work has been collected. The total elapsed time is then normalized back to seconds per algorithm run. This is a practical microbenchmarking safeguard: it reduces the distortion caused by timer granularity and per-call overhead on very short operations [1][2][9].
+Very small workloads are batched until at least `50 ms` of total timed work has been accumulated. The total elapsed time is then normalized back to seconds per algorithm run. This reduces distortion from timer granularity and fixed per-call overhead on extremely small operations [1][2][9].
 
-The timer boundary is intentionally narrow. That makes the metric cleaner for comparing algorithm-section cost, but it also means the results do not represent full user-visible latency. Public benchmarking projects sometimes report both external wall-clock and in-process timing for exactly this reason [10].
+The timer boundary is intentionally narrow. That improves construct clarity for algorithm-section cost, but it also means the results are not user-visible wall-clock latencies. Public benchmark suites often separate in-process timing from end-to-end timing for exactly this reason [10].
 
 ## E. Trial Policy and Summary Statistics
 
 - `5` warm-up trials per configuration
 - `20` measured trials per configuration
-- Published summaries use the median of measured trials
-- Min/max bands and per-group standard deviation are preserved for spread
+- Published figures use the median of measured trials
+- The summary CSV also records Q1, Q3, IQR, min/max, standard deviation, and a `95%` bootstrap confidence interval for the median
 - Raw trial rows remain available in `results/data/benchmark_runs.csv`
 
-The median is used because it is more robust than the mean to transient scheduler noise and background interruptions [2]. The warm-up policy is a pragmatic compromise: it is enough to avoid treating the first invocation as representative, but it is not a proof that the JVM reached a stable steady state [2][3]. This report therefore treats Java measurements as harness-specific observations, not as a formal steady-state characterization.
+The median remains the primary statistic because it is robust to transient scheduler noise and background interruptions [2]. Quartiles and IQR provide a robust spread summary that is less sensitive to isolated extremes than raw min/max. The bootstrap interval adds a descriptive uncertainty band around the median estimate for each benchmark configuration. It does not replace inferential cross-language statistics or justify broad claims beyond this harness.
 
-## F. Methodology Review Verdict
+The warm-up policy is a pragmatic compromise rather than a convergence proof. It reduces the likelihood that a first invocation dominates the published result, but it does not establish that the JVM reached a stable steady state [2][3].
 
-The final review classified the current methodology as follows:
+## F. Methodological Positioning
 
-- **Strong as implemented**: deterministic shared datasets, explicit workload matrix, comparison-count parity checks, preserved raw trials, and strict collector validation.
-- **Correct but scope-limited**: in-process timing, binary-search presort exclusion, median-first reporting, and modest warm-up within one process per configuration.
-- **Weaker than dedicated benchmark harnesses**: no CPU pinning, no process isolation per measured sample, no confidence intervals, no GC/JIT telemetry, and no end-to-end wall-clock metric.
+The present methodology is strongest on internal workload alignment and artifact traceability:
 
-That means the experiment is methodologically sound for exploratory cross-language analysis, provided the documentation keeps the claims narrow and explicit.
+- deterministic shared datasets
+- explicit benchmark matrices and search scenarios
+- comparison-count parity checks across languages
+- preserved warm-up rows and measured-trial rows
+- strict collector and summary validation
+- published summary and metadata artifacts that can be traced back to the raw CSV
+
+It remains weaker than dedicated benchmark frameworks on environment control and formal inference:
+
+- no CPU affinity or core isolation
+- no per-sample process isolation
+- no GC or JIT telemetry
+- no adaptive steady-state detection
+- no formal cross-language hypothesis tests
+
+The appropriate reading is therefore: strong exploratory methodology for a transparent repository benchmark, but not a publication-grade runtime study.

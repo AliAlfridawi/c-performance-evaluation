@@ -1,31 +1,68 @@
 # IV. Experimental Setup
 
-The benchmark was regenerated on a single Windows workstation. The host details that were captured for this review are:
+The checked-in benchmark snapshot was regenerated on a single Windows workstation. The repository now records the machine and toolchain context in `results/data/benchmark_metadata.json`; the key fields for the current snapshot are summarized below.
 
 | Component | Value |
 | --- | --- |
-| CPU | AMD Ryzen 7 8840HS w/ Radeon 780M Graphics |
+| CPU family | AMD64 Family 25 Model 117 Stepping 2 |
 | Logical processors | `16` |
-| Operating system | Windows 11, `amd64` |
+| Operating system | Windows `10.0.26200` on `AMD64` |
 | Active power plan | `Balanced` |
 | GCC | `15.2.0` |
-| Apache Maven | `3.9.14` |
-| Java | Eclipse Adoptium OpenJDK `17.0.18` |
+| Java | OpenJDK `17.0.18` |
 | Python | `3.11.9` |
 
-The active power plan and the single-host nature of the run matter. This repository does not pin CPU affinity, isolate cores, disable frequency scaling, or record background-load telemetry. The numbers should therefore be read as measurements from one documented desktop environment rather than as hardware-invariant constants.
+These values matter because the repository is a single-host benchmark artifact. The numbers should be read as measurements from one documented environment rather than as hardware-invariant constants.
 
-## A. Build and Execution Workflow
+## A. Build and Execution Configuration
 
-Repository tooling:
+| Subsystem | Configuration |
+| --- | --- |
+| C build | `mingw32-make all` from `src/c/` |
+| C flags | `-std=c11 -Wall -Wextra -O2` |
+| Java build | `mvn -q -DskipTests compile` |
+| Java release target | `17` |
+| Java runtime flags | none beyond the default launcher |
+| Python runtime | CPython `3.11.9` |
+| Python runtime flags | none |
 
-- C sources are built from `src/c/` with `mingw32-make`
-- Java sources are compiled from `src/java/` through Maven
-- Python benchmarking and plotting scripts run from the repository root
+Benchmark runner templates recorded in `benchmark_metadata.json`:
 
-This repository uses a documented local workflow rather than a continuous-integration pipeline. That keeps the benchmark process aligned with the Windows environment used for the published artifact and avoids implying cross-platform automation support that the project does not claim.
+- Python: `python src/python/benchmark.py <algorithm> <distribution> <N> --input-file <path> --trials <n> --warmup <n> --search-case <case>`
+- C: `src/c/benchmark.exe <algorithm> <distribution> <N> --input-file <path> --trials <n> --warmup <n> --search-case <case>`
+- Java: `java -cp target/classes bench.Benchmark <algorithm> <distribution> <N> --input-file <path> --trials <n> --warmup <n> --search-case <case>`
 
-Recommended reproduction workflow:
+## B. Controlled and Uncontrolled Factors
+
+| Category | Controlled in this repository | Not controlled in this repository |
+| --- | --- | --- |
+| Workload definition | Shared input files, explicit benchmark matrix, explicit search cases, comparison-count parity | Real-application workload mix |
+| Timing scope | Same in-process timing boundary per language | End-to-end wall-clock latency |
+| Trial policy | Common warm-up and measured-trial counts, common `50 ms` batching threshold | Adaptive steady-state detection |
+| Build configuration | Documented compiler flags and runtime entrypoints | Alternative optimization flags or JVM tuning |
+| Host environment | Host, CPU count, power plan, and key tool versions recorded | CPU affinity, core isolation, thermal state, background-load telemetry |
+
+This table is the practical interpretation boundary for the report. The benchmark is controlled enough to support matched-workload algorithm-section claims, but not controlled enough to support hardware-independent or universally generalizable rankings.
+
+## C. Output Artifacts
+
+| Artifact | Purpose |
+| --- | --- |
+| `results/data/benchmark_runs.csv` | Raw trial rows including warm-up flags and batch-loop counts |
+| `results/data/benchmark_summary.csv` | Medians, quartiles, IQR, `95%` bootstrap median CI, min/max, standard deviation, comparisons, and trial counts |
+| `results/data/benchmark_metadata.json` | Host, toolchain, build, command, and artifact-hash metadata |
+| `results/graphs/quicksort_median_time.png` | Quicksort timing figure with IQR bands |
+| `results/graphs/linear_search_median_time.png` | Linear-search timing figure with IQR bands |
+| `results/graphs/binary_search_median_time.png` | Binary-search timing figure with IQR bands |
+| `results/graphs/comparison_counts.png` | Workload-consistency figure based on comparison counts |
+| `results/graphs/timing_overview.png` | Compact multi-panel timing summary |
+| `results/graphs/timing_speedup_vs_c.png` | Timing normalized against the C baseline |
+
+The metadata sidecar also records SHA-256 hashes for the raw CSV, summary CSV, and figures so that the checked-in report snapshot can be tied to exact artifact bytes.
+
+## D. Reproduction Workflow
+
+Recommended local workflow:
 
 1. `cd src/c`
 2. `mingw32-make all`
@@ -35,28 +72,11 @@ Recommended reproduction workflow:
 6. `python scripts/collect_benchmarks.py`
 7. `python scripts/plot_benchmarks.py`
 
-Validation commands used by this repository:
+Validation commands used by the repository:
 
 - `cd src/c && mingw32-make test`
 - `mvn test`
 - `python -m unittest src/python/test_algorithms.py`
 - `python -m unittest test_benchmark_pipeline.py`
 
-## B. Output Artifacts
-
-Artifacts produced by the workflow:
-
-| Artifact | Purpose |
-| --- | --- |
-| `results/data/benchmark_runs.csv` | Raw trial rows including warm-up flags and batch-loop counts |
-| `results/data/benchmark_summary.csv` | Median/min/max/std summary per language and benchmark case |
-| `results/graphs/quicksort_median_time.png` | Quicksort timing figure |
-| `results/graphs/linear_search_median_time.png` | Linear search timing figure |
-| `results/graphs/binary_search_median_time.png` | Binary search timing figure |
-| `results/graphs/comparison_counts.png` | Workload-consistency figure based on comparison counts |
-| `results/graphs/timing_overview.png` | Compact report-style overview of all timing surfaces |
-| `results/graphs/timing_speedup_vs_c.png` | Timing normalized against the C baseline |
-
-## C. Reproducibility Notes
-
-The repository is reasonably reproducible for a small research artifact because it preserves datasets, raw measurements, and plotting code together. It is not fully environment-normalized in the way that dedicated benchmarking frameworks or isolated lab machines would be. A future regeneration intended for stronger publication claims should also capture CPU governor behavior, memory capacity, background-load state, and benchmark-command metadata alongside the CSV outputs.
+The workflow is intentionally local rather than CI-driven. That keeps the published artifacts tied to the documented Windows environment used for measurement and avoids implying cross-platform automation support that the repository does not claim.

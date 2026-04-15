@@ -3,8 +3,17 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
+import os
+import platform
+import random
+import re
+import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
+from xml.etree import ElementTree
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -15,10 +24,14 @@ from matplotlib.ticker import FuncFormatter, LogFormatterMathtext, LogLocator, M
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CSV = REPO_ROOT / "results" / "data" / "benchmark_runs.csv"
 DEFAULT_SUMMARY = REPO_ROOT / "results" / "data" / "benchmark_summary.csv"
+DEFAULT_METADATA = REPO_ROOT / "results" / "data" / "benchmark_metadata.json"
 DEFAULT_OUT = REPO_ROOT / "results" / "graphs"
 DEFAULT_LANGUAGES = ("c", "java", "python")
 QUICKSORT_DISTRIBUTIONS = ("random", "ascending", "descending")
 SEARCH_ALGORITHMS = ("linear_search", "binary_search")
+BOOTSTRAP_RESAMPLES = 2000
+BOOTSTRAP_CONFIDENCE = 0.95
+BOOTSTRAP_SEED = 20260415
 
 THEME = {
     "paper": "#f7f5ef",
@@ -100,6 +113,71 @@ def load_trials(path: Path) -> pd.DataFrame:
     df["language"] = df["language"].str.lower().str.strip()
     df["seconds_per_run"] = df["elapsed_ns"] / df["batch_loops"].clip(lower=1) / 1_000_000_000.0
     return df
+
+
+def _interpolate(sorted_values: list[float], rank: float) -> float:
+    if not sorted_values:
+        return float("nan")
+    lower = max(0, min(len(sorted_values) - 1, int(rank)))
+    upper = max(0, min(len(sorted_values) - 1, int(rank + 1)))
+    if lower == upper:
+        return sorted_values[lower]
+    fraction = rank - lower
+    return sorted_values[lower] + (sorted_values[upper] - sorted_values[lower]) * fraction
+
+
+def _bootstrap_median_ci(values: list[float], *, seed: int) -> tuple[float, float]:
+    if not values:
+        return float("nan"), float("nan")
+    if len(values) == 1:
+        return values[0], values[0]
+
+    rng = random.Random(seed)
+    sample_size = len(values)
+    medians: list[float] = []
+    for _ in range(BOOTSTRAP_RESAMPLES):
+        resample = [values[rng.randrange(sample_size)] for _ in range(sample_size)]
+        medians.append(float(pd.Series(resample).median()))
+    medians.sort()
+
+    alpha = (1.0 - BOOTSTRAP_CONFIDENCE) / 2.0
+    lower_rank = alpha * (len(medians) - 1)
+    upper_rank = (1.0 - alpha) * (len(medians) - 1)
+    return _interpolate(medians, lower_rank), _interpolate(medians, upper_rank)
+
+
+def _group_seed(group: pd.DataFrame) -> int:
+    group_name = getattr(group, "name", None)
+    if isinstance(group_name, tuple):
+        key = "|".join(str(part) for part in group_name)
+    else:
+        key = str(group_name)
+    digest = hashlib.sha256(key.encode("utf-8")).digest()
+    return BOOTSTRAP_SEED + int.from_bytes(digest[:8], "big")
+
+
+def _summarize_group(group: pd.DataFrame) -> pd.Series:
+    seconds = group["seconds_per_run"].astype(float)
+    values = seconds.tolist()
+    q1_seconds = float(seconds.quantile(0.25))
+    q3_seconds = float(seconds.quantile(0.75))
+    ci95_low_seconds, ci95_high_seconds = _bootstrap_median_ci(values, seed=_group_seed(group))
+    return pd.Series(
+        {
+            "median_seconds": float(seconds.median()),
+            "q1_seconds": q1_seconds,
+            "q3_seconds": q3_seconds,
+            "iqr_seconds": q3_seconds - q1_seconds,
+            "ci95_low_seconds": ci95_low_seconds,
+            "ci95_high_seconds": ci95_high_seconds,
+            "min_seconds": float(seconds.min()),
+            "max_seconds": float(seconds.max()),
+            "std_seconds": float(seconds.std()),
+            "median_comparisons": float(group["comparisons"].median()),
+            "trials": int(group["trial"].count()),
+            "median_batch_loops": float(group["batch_loops"].median()),
+        }
+    )
 
 
 def _expected_group_keys(n_values: list[int], languages: list[str]) -> set[tuple[str, str, str, str, int, str]]:
@@ -203,19 +281,180 @@ def summarize_trials(df: pd.DataFrame) -> pd.DataFrame:
         return measured
     group_cols = ["language", "algorithm", "distribution", "input_id", "N", "search_case"]
     summary = (
-        measured.groupby(group_cols, as_index=False)
-        .agg(
-            median_seconds=("seconds_per_run", "median"),
-            min_seconds=("seconds_per_run", "min"),
-            max_seconds=("seconds_per_run", "max"),
-            std_seconds=("seconds_per_run", "std"),
-            median_comparisons=("comparisons", "median"),
-            trials=("trial", "count"),
-            median_batch_loops=("batch_loops", "median"),
-        )
+        measured.groupby(group_cols, sort=True)[["seconds_per_run", "comparisons", "trial", "batch_loops"]]
+        .apply(_summarize_group)
+        .reset_index()
         .sort_values(["algorithm", "distribution", "search_case", "language", "N"])
     )
     return summary
+
+
+def _safe_first_line(cmd: list[str]) -> str | None:
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+
+    merged = "\n".join(part for part in (result.stdout, result.stderr) if part)
+    lines = [line.strip() for line in merged.splitlines() if line.strip()]
+    return lines[0] if lines else None
+
+
+def _first_available_line(commands: list[list[str]]) -> str | None:
+    for cmd in commands:
+        output = _safe_first_line(cmd)
+        if output:
+            return output
+    return None
+
+
+def _read_cflags() -> str | None:
+    makefile = REPO_ROOT / "src" / "c" / "Makefile"
+    if not makefile.is_file():
+        return None
+    match = re.search(r"^CFLAGS\s*=\s*(.+)$", makefile.read_text(encoding="utf-8"), re.MULTILINE)
+    return match.group(1).strip() if match else None
+
+
+def _read_maven_release() -> str | None:
+    pom = REPO_ROOT / "pom.xml"
+    if not pom.is_file():
+        return None
+    try:
+        root = ElementTree.fromstring(pom.read_text(encoding="utf-8"))
+    except ElementTree.ParseError:
+        return None
+    ns = {"m": "http://maven.apache.org/POM/4.0.0"}
+    node = root.find(".//m:properties/m:maven.compiler.release", ns)
+    return node.text.strip() if node is not None and node.text else None
+
+
+def _detect_power_plan() -> str | None:
+    if os.name != "nt":
+        return None
+    return _safe_first_line(["powercfg", "/getactivescheme"])
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(65536), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _artifact_record(path: Path) -> dict[str, str | int]:
+    try:
+        display_path = str(path.relative_to(REPO_ROOT))
+    except ValueError:
+        display_path = str(path)
+    return {
+        "path": display_path,
+        "sha256": _sha256(path),
+        "bytes": path.stat().st_size,
+    }
+
+
+def build_metadata(raw_csv: Path, summary_csv: Path, out_dir: Path, trials: pd.DataFrame, summary: pd.DataFrame) -> dict:
+    measured = trials[trials["warmup"] == 0]
+    warmup = trials[trials["warmup"] == 1]
+    group_cols = ["language", "algorithm", "distribution", "input_id", "N", "search_case"]
+    unique_groups = summary[group_cols].drop_duplicates()
+    graph_paths = sorted(path for path in out_dir.glob("*.png") if path.is_file())
+    processor = platform.processor() or os.environ.get("PROCESSOR_IDENTIFIER")
+
+    return {
+        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "artifacts": {
+            "raw_trials": _artifact_record(raw_csv),
+            "summary": _artifact_record(summary_csv),
+            "graphs": [_artifact_record(path) for path in graph_paths],
+        },
+        "matrix": {
+            "languages": sorted(str(value) for value in summary["language"].unique().tolist()),
+            "algorithms": sorted(str(value) for value in summary["algorithm"].unique().tolist()),
+            "quicksort_distributions": list(QUICKSORT_DISTRIBUTIONS),
+            "search_cases": list(SEARCH_CASE_LABELS),
+            "n_values": sorted(int(value) for value in summary["N"].unique().tolist()),
+            "benchmark_groups": int(len(unique_groups)),
+            "raw_rows": int(len(trials)),
+            "warmup_rows": int(len(warmup)),
+            "measured_rows": int(len(measured)),
+            "warmup_trials_per_group": int(warmup.groupby(group_cols).size().iloc[0]) if not warmup.empty else 0,
+            "measured_trials_per_group": int(measured.groupby(group_cols).size().iloc[0]) if not measured.empty else 0,
+            "summary_fields": summary.columns.tolist(),
+            "bootstrap": {
+                "resamples": BOOTSTRAP_RESAMPLES,
+                "confidence_level": BOOTSTRAP_CONFIDENCE,
+                "statistic": "median seconds per run",
+            },
+        },
+        "commands": {
+            "build": [
+                "cd src/c",
+                "mingw32-make all",
+                "cd ../..",
+                "mvn -q -DskipTests compile",
+            ],
+            "validate": [
+                "cd src/c",
+                "mingw32-make test",
+                "cd ../..",
+                "mvn test",
+                "python -m unittest src/python/test_algorithms.py",
+                "python -m unittest test_benchmark_pipeline.py",
+            ],
+            "collect": "python scripts/collect_benchmarks.py",
+            "plot": "python scripts/plot_benchmarks.py",
+            "runner_templates": {
+                "python": "python src/python/benchmark.py <algorithm> <distribution> <N> --input-file <path> --trials <n> --warmup <n> --search-case <case>",
+                "c": "src/c/benchmark.exe <algorithm> <distribution> <N> --input-file <path> --trials <n> --warmup <n> --search-case <case>",
+                "java": "java -cp target/classes bench.Benchmark <algorithm> <distribution> <N> --input-file <path> --trials <n> --warmup <n> --search-case <case>",
+            },
+        },
+        "build_configuration": {
+            "c": {
+                "make_target": "src/c/Makefile",
+                "cflags": _read_cflags(),
+            },
+            "java": {
+                "pom": "pom.xml",
+                "maven_compiler_release": _read_maven_release(),
+                "jvm_flags": [],
+            },
+            "python": {
+                "runtime_flags": [],
+                "timer": "time.perf_counter_ns()",
+            },
+        },
+        "host": {
+            "system": platform.system(),
+            "release": platform.release(),
+            "version": platform.version(),
+            "machine": platform.machine(),
+            "processor": processor,
+            "node": platform.node(),
+            "logical_cpu_count": os.cpu_count(),
+            "python_version": platform.python_version(),
+            "active_power_plan": _detect_power_plan(),
+        },
+        "toolchains": {
+            "gcc_version": _first_available_line([["gcc", "--version"], ["gcc.exe", "--version"]]),
+            "java_version": _first_available_line([["java", "-version"], ["java.exe", "-version"]]),
+            "maven_version": _first_available_line([["mvn", "-version"], ["mvn.cmd", "-version"]]),
+        },
+    }
+
+
+def write_metadata(metadata: dict, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
 
 
 def _select_xticks(n_values: list[int], max_ticks: int = 5) -> list[int]:
@@ -303,7 +542,7 @@ def _language_handles(*, include_band: bool = False) -> list[Line2D | Patch]:
             )
         )
     if include_band:
-        handles.append(Patch(facecolor=LANG_STYLE["c"]["color"], alpha=0.12, label="Min-max band"))
+        handles.append(Patch(facecolor=LANG_STYLE["c"]["color"], alpha=0.12, label="IQR band"))
     return handles
 
 
@@ -355,8 +594,8 @@ def _plot_time_series(
     ordered = group.sort_values("N")
     ax.fill_between(
         ordered["N"],
-        ordered["min_seconds"],
-        ordered["max_seconds"],
+        ordered["q1_seconds"],
+        ordered["q3_seconds"],
         color=style["color"],
         alpha=band_alpha,
         zorder=1,
@@ -449,7 +688,7 @@ def plot_quicksort(summary: pd.DataFrame, out: Path) -> None:
         if idx == 0:
             ax.set_ylabel("Median seconds per run")
 
-    _annotate_panel(axes[0], "Median line with min-max spread")
+    _annotate_panel(axes[0], "Median line with IQR band")
     fig.suptitle("Quick sort timing", fontsize=19, color=THEME["ink"], y=0.96)
     fig.text(
         0.5,
@@ -471,7 +710,7 @@ def plot_quicksort(summary: pd.DataFrame, out: Path) -> None:
     fig.text(
         0.5,
         0.055,
-        "Input size and timing axes use logarithmic scaling. Timings exclude process startup, input loading, and binary-search presorting.",
+        "Input size and timing axes use logarithmic scaling. Shaded bands show the interquartile range across 20 measured trials.",
         ha="center",
         fontsize=9.1,
         color=THEME["muted"],
@@ -502,7 +741,7 @@ def plot_search(summary: pd.DataFrame, algorithm: str, out: Path) -> None:
             ax.set_xlabel("Input size N")
     axes[0][0].set_ylabel("Median seconds per run")
     axes[1][0].set_ylabel("Median seconds per run")
-    _annotate_panel(axes[0][0], "Ascending input only")
+    _annotate_panel(axes[0][0], "Ascending input only; line shows median")
 
     title = f"{ALGORITHM_LABELS[algorithm]} timing"
     fig.suptitle(title, fontsize=18.5, color=THEME["ink"], y=0.965)
@@ -526,7 +765,7 @@ def plot_search(summary: pd.DataFrame, algorithm: str, out: Path) -> None:
     fig.text(
         0.5,
         0.04,
-        "Shaded bands show min-max spread across measured trials. Input size and timing axes use logarithmic scaling.",
+        "Shaded bands show the interquartile range across 20 measured trials. Input size and timing axes use logarithmic scaling.",
         ha="center",
         fontsize=9.1,
         color=THEME["muted"],
@@ -678,7 +917,7 @@ def plot_timing_overview(summary: pd.DataFrame, out: Path) -> None:
     fig.text(
         0.5,
         0.04,
-        "Median of 20 measured trials. Shaded bands show min-max spread within each benchmark configuration.",
+        "Median of 20 measured trials. Shaded bands show the interquartile range; 95% bootstrap CIs are recorded in the summary CSV.",
         ha="center",
         fontsize=9.1,
         color=THEME["muted"],
@@ -765,7 +1004,14 @@ def plot_timing_speedup_vs_c(summary: pd.DataFrame, out: Path) -> None:
     _save_figure(fig, out)
 
 
-def run_all(raw_csv: Path, summary_csv: Path, out_dir: Path, *, strict: bool = True) -> None:
+def run_all(
+    raw_csv: Path,
+    summary_csv: Path,
+    out_dir: Path,
+    *,
+    metadata_path: Path | None = None,
+    strict: bool = True,
+) -> None:
     apply_plot_theme()
     trials = load_trials(raw_csv)
     validate_trials(trials, strict=strict)
@@ -784,11 +1030,15 @@ def run_all(raw_csv: Path, summary_csv: Path, out_dir: Path, *, strict: bool = T
     plot_timing_overview(summary, out_dir / "timing_overview.png")
     plot_timing_speedup_vs_c(summary, out_dir / "timing_speedup_vs_c.png")
 
+    target_metadata = metadata_path or summary_csv.with_name(DEFAULT_METADATA.name)
+    write_metadata(build_metadata(raw_csv, summary_csv, out_dir, trials, summary), target_metadata)
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Plot benchmark summaries from raw trial CSV.")
     parser.add_argument("--csv", type=Path, default=DEFAULT_CSV, help="Raw trial CSV path")
     parser.add_argument("--summary-out", type=Path, default=DEFAULT_SUMMARY, help="Summary CSV output")
+    parser.add_argument("--metadata-out", type=Path, default=DEFAULT_METADATA, help="Metadata JSON output")
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT, help="Graph output directory")
     parser.add_argument(
         "--allow-partial",
@@ -802,11 +1052,18 @@ def main() -> int:
         return 1
 
     try:
-        run_all(args.csv, args.summary_out, args.out, strict=not args.allow_partial)
+        run_all(
+            args.csv,
+            args.summary_out,
+            args.out,
+            metadata_path=args.metadata_out,
+            strict=not args.allow_partial,
+        )
     except SummaryValidationError as exc:
         print(str(exc), file=sys.stderr)
         return 1
     print(f"summary written to {args.summary_out}")
+    print(f"metadata written to {args.metadata_out}")
     print(f"graphs written to {args.out}")
     return 0
 

@@ -1,48 +1,54 @@
 # VI. Discussion
 
-## A. Final Methodology Review
+## A. Overall Assessment
 
-The final review concluded that the benchmark design is methodologically sound for a narrow exploratory purpose. The strongest aspects are:
+The benchmark design is methodologically credible for a narrow exploratory purpose. Its strongest features are transparent workload definition, strict cross-language workload checks, preserved raw trials, and explicit publication of both summary statistics and run metadata. Those choices make the artifact substantially stronger than an informal “same algorithm in three languages” comparison.
 
-- shared deterministic inputs instead of language-specific random generation
-- explicit scenario coverage for search benchmarks
-- preserved warm-up rows and repeated measured trials
-- batching of very short operations before normalization
-- raw-trial retention and strict validation of missing or inconsistent groups
+The main limitation is scope rather than correctness. The metric is intentionally narrow: `elapsed_ns` covers only the in-process algorithm section after setup. That is useful for a tightly defined question, but it is not the same thing as application latency, throughput under service load, or steady-state managed-runtime behavior.
 
-The most important limitation is scope rather than correctness. The metric is intentionally narrow: `elapsed_ns` covers only the in-process algorithm section after setup. That makes the timing boundary cleaner, but it also means the numbers should not be read as end-to-end application latency, full runtime cost, or universal language rankings.
+## B. Comparison to Related Guidance
 
-Two other interpretation limits must remain explicit. First, fixed warm-up counts do not prove that the JVM reached a stable steady state [2][3]. Second, the run was performed on one Windows host under a balanced power plan with no CPU affinity control or background-load isolation. The methodology is therefore defensible as an engineering benchmark harness, but not equivalent to a dedicated lab-grade performance study.
+Georges et al. argue that Java performance evaluation should separate startup effects from steady-state behavior and should use statistically rigorous analysis rather than ad hoc sampling [2]. This repository aligns with that guidance in part: it records repeated trials, separates warm-up from measured rows, and publishes a richer descriptive summary than a single median alone. It remains materially weaker than their standard because it does not attempt convergence detection, inferential cross-language statistics, or deeper runtime instrumentation.
 
-## B. Comparison to Related Evaluations and Guidance
+Mytkowicz et al. show how environmental confounders can invalidate benchmark conclusions even when the code appears unchanged [1]. The repository responds to that lesson by fixing the workload definition through shared inputs and by validating every published case against cross-language comparison parity. The remaining gap is environment control: CPU affinity, background services, thermal behavior, and power-management effects are documented but not engineered away.
 
-Georges et al. argue that Java performance evaluation should separate startup effects from steady-state behavior and should use statistically rigorous analysis rather than ad hoc samples [2]. This repository aligns with that guidance in part: it records repeated trials, separates warm-up from measured rows, and uses medians instead of single samples. It is still materially weaker than the standard they outline because it does not attempt steady-state detection, confidence intervals, or more formal inferential analysis.
+Barrett et al. demonstrate that VM warm-up can be irregular and that simplistic warm-up assumptions may fail [3]. That warning applies directly here. The current `5` warm-up trials are useful for avoiding cold-start-only reporting, but they are not evidence that the JVM has reached a stable optimization regime.
 
-Mytkowicz et al. show how environmental confounders can invalidate benchmark conclusions even when the code under test appears unchanged [1]. The repository responds to that lesson by using shared on-disk datasets, fixed benchmark matrices, and strict validation of published groups. The remaining gap is environment control: CPU affinity, background services, and power-management effects are documented as uncontrolled rather than engineered away.
+Marr et al. emphasize language-agnostic workload definitions in cross-language compiler benchmarking [4]. This repository is strongest on that exact dimension. Its shared datasets and parity checks create much tighter workload alignment than the common “same idea, different implementation” comparison. Its scope, however, is much smaller than a benchmark suite intended for language-implementation research.
 
-Barrett et al. demonstrate that VM warm-up behavior can be irregular and that simplistic warm-up assumptions can fail [3]. That is directly relevant here. The current `5` warm-up trials are a practical compromise, not evidence that Java has converged to a steady-state regime. The documentation therefore treats Java timings as harness-specific observations instead of "true JVM peak performance."
-
-Marr et al. emphasize the importance of language-agnostic workload definitions in cross-language benchmarking [4]. This repository is strongest on that dimension: shared datasets and comparison-count parity make it much better controlled than the typical "same idea, different implementation" benchmark. The scope is also much smaller than Marr et al.: only three algorithms, one machine, and one set of runtime versions.
-
-Public tooling and benchmark projects illustrate the same tradeoff in a complementary way. `pyperf` calibrates loop counts, uses worker processes, and documents system-tuning practices for Python benchmarks [9]. JMH is explicitly designed as a dedicated Java benchmarking harness [11]. The Computer Language Benchmarks Game distinguishes between externally measured wall-clock time and in-process timing views [10]. Compared with those systems, this repository is strong on transparency and workload matching, but weaker on isolation, automation of warm-up strategy, and breadth of performance metrics.
-
-Taken together, these comparisons support a clear verdict: the methodology is sound for a transparent repository benchmark, stronger than many casual cross-language comparisons, and weaker than specialized performance harnesses. That is an acceptable position as long as the report states this explicitly.
+Dedicated tools illustrate the same tradeoff from the tooling side. `pyperf` adds worker processes and system-tuning guidance for Python benchmarks [9], while JMH exists specifically to benchmark JVM code under a more disciplined execution model [11]. Compared with those tools, this repository is more manual and less isolated, but more transparent about the raw benchmark matrix and repository-local artifacts.
 
 ## C. Threats to Validity
 
-- **Single-machine dependence**: Results were collected on one Windows 11 host with one CPU model, one power plan, and one runtime/toolchain set.
-- **Environment noise**: Scheduler activity, background processes, thermal behavior, and power management remain uncontrolled confounders [1][9].
-- **Limited warm-up model**: JVM optimization and garbage-collection behavior are not instrumented, and fixed warm-up counts do not guarantee a steady state [2][3].
-- **Narrow timing boundary**: Startup, file loading, and binary-search presorting are deliberately excluded, so the metric does not represent full application latency [10].
-- **Exploratory statistics**: Median, min/max, and standard deviation are appropriate descriptive summaries here, but they are not a substitute for formal confidence intervals or hypothesis tests [2].
-- **Kernel-level workload bias**: Small algorithm kernels can amplify interpreter and dispatch overhead relative to workloads dominated by library calls or I/O.
+| Validity type | Mitigation in this repository | Remaining threat |
+| --- | --- | --- |
+| Internal validity | Shared inputs, explicit benchmark matrix, comparison-count parity, strict validation, preserved raw trials | Environment noise can still perturb timing even when workload is aligned |
+| Construct validity | Clear in-process timing boundary, explicit exclusion of startup and presorting, explicit search scenarios | The reported metric is narrower than end-to-end user-visible performance |
+| External validity | Host, toolchain, and power plan are documented in `benchmark_metadata.json` | Results are collected on one Windows machine with one set of runtime versions |
+| Conclusion validity | `20` measured trials, median-first reporting, quartiles, IQR, bootstrap CI for the median | No formal inferential statistics or cross-language hypothesis tests |
 
-## D. Recommended Next Steps
+This table is the clearest summary of the repository’s research quality: strong control of what was measured, weaker control over everything that could influence those measurements.
 
-If the repository needs to move closer to publication-grade benchmarking, the next upgrades should be:
+## D. What the Repository Can Defend
 
-- record full host metadata alongside every regeneration
+The repository can defend the following statements:
+
+- the published benchmark cases impose matched algorithmic work across languages
+- substantial timing differences remain after that workload alignment on the documented host
+- explicit search-case selection materially changes search behavior and must be reported
+
+It cannot defend the following statements:
+
+- one language is universally faster in general
+- the reported medians are end-to-end application latencies
+- the Java rows represent confirmed steady-state peak JVM performance
+
+## E. Recommended Next Steps
+
+If the artifact needs to move closer to publication-grade benchmarking, the next upgrades should be:
+
 - add optional CPU-affinity and background-noise controls
 - add a complementary end-to-end wall-clock metric alongside the current in-process metric
-- evaluate Java with a dedicated JMH companion benchmark for a steadier warm-up model
-- add stronger statistical treatment if precise cross-runtime claims become a requirement
+- add a JMH companion benchmark for the Java kernels
+- add repeated regenerations across sessions or machines
+- add stronger inferential analysis if precise cross-runtime claims become a requirement

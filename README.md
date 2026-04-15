@@ -6,94 +6,82 @@ This repository benchmarks three small algorithm kernels across C, Java, and Pyt
 - linear search
 - binary search
 
-The final review of the harness found that the methodology is defensible for a narrow question: how do these implementations behave when the timed region is limited to the in-process algorithm section and the same algorithmic work is enforced through shared datasets and comparison-count parity?
+The repository answers a narrow question: when the algorithmic workload is aligned across languages with shared deterministic inputs and comparison-count parity, what in-process timing differences remain on this Windows host?
 
-It is not an end-to-end application benchmark, a universal language ranking, or a proof of steady-state JVM performance.
+It is not an end-to-end application benchmark, a universal language ranking, or a steady-state JVM study.
 
-## What This Repository Can Claim
+## Research Question
 
-- All published benchmark cases use the same deterministic on-disk inputs across languages.
-- Comparison counts match across C, Java, and Python for every published configuration, which is strong evidence that the algorithmic workload is aligned.
-- Warm-up rows, repeated measured trials, and raw trial capture make the results materially more defensible than ad hoc single-run benchmarks.
-- Very small workloads are batched until at least `50 ms` of total timed work is collected, which reduces timer-noise distortion on micro-scale measurements.
+How do C, Java, and Python differ in median in-process execution time for matched algorithmic work when process startup, input loading, argument parsing, and binary-search presorting are excluded from the timed region?
 
-## What It Does Not Claim
+## Main Artifacts
 
-- It does not measure process startup, file I/O, argument parsing, or binary-search presorting.
-- It does not control CPU affinity, core isolation, background load, or power-management state beyond documenting the host used.
-- It does not establish steady-state JVM behavior or perform inferential statistics such as confidence intervals.
-- It does not generalize beyond this Windows 11 machine, toolchain set, and workload family.
+| Artifact | Purpose |
+| --- | --- |
+| `results/data/benchmark_runs.csv` | Raw warm-up and measured trial rows |
+| `results/data/benchmark_summary.csv` | Per-group medians, quartiles, IQR, min/max, standard deviation, and 95% bootstrap median CIs |
+| `results/data/benchmark_metadata.json` | Machine-readable host, toolchain, build, command, and artifact metadata |
+| `results/graphs/*.png` | Report-ready timing and comparison figures |
+| `docs/index.md` | Full supporting report |
 
-## Methodology Contract
+## Method Contract
 
 | Dimension | Current contract |
 | --- | --- |
-| Workload control | Shared datasets in `data/benchmark_inputs/` plus cross-language comparison-count parity |
+| Workloads | `quicksort`, `linear_search`, `binary_search` |
+| Languages | C, Java, Python |
 | Quicksort inputs | `random`, `ascending`, `descending` |
-| Search inputs | `ascending` only |
+| Search inputs | `ascending` |
 | Search cases | `first_hit`, `middle_hit`, `last_hit`, `miss` |
-| Timed region | In-process algorithm body only |
-| Excluded costs | Process startup, input loading, argument parsing, binary-search presorting |
-| Trial policy | `5` warm-up trials, `20` measured trials |
+| Timed region | In-process algorithm section only |
+| Excluded costs | Process startup, file loading, argument parsing, binary-search presorting |
+| Warm-up policy | `5` warm-up trials per configuration |
+| Measured policy | `20` measured trials per configuration |
 | Small-workload policy | Batch repeated executions until at least `50 ms` total timed work |
 | Primary statistic | Median seconds per run |
-| Published artifacts | Raw CSV, summary CSV, and report-ready graphs |
+| Uncertainty summaries | Q1/Q3, IQR, min/max, standard deviation, and 95% bootstrap CI for the median |
+| Workload control | Shared on-disk inputs plus cross-language comparison-count parity |
 
-Comparison counts are the control variable for equal algorithmic work. They do not erase differences in runtime services such as JIT compilation, memory management, interpreter dispatch, cache behavior, or standard-library setup.
+Comparison parity is the internal workload-control variable. It shows that the algorithmic work is aligned for each published case. It does not equalize memory layout, interpreter dispatch, JIT optimization, cache locality, or other runtime services.
 
-## Methodology Review Verdict
+## Representative Results
 
-The harness is well structured for an exploratory benchmark. Its strongest features are deterministic shared inputs, strict collector validation, explicit search scenarios, preserved raw trials, and scope-limited claims.
+All values below come from `results/data/benchmark_summary.csv`.
 
-The main caveat is not correctness but scope. Stronger benchmarking systems such as `pyperf`, JMH, or the infrastructure behind public cross-language suites typically add process isolation, richer warm-up strategies, deeper environment control, and more formal statistical analysis. This repository should therefore be presented as a transparent, reproducible benchmark harness with narrow claims, not as a definitive statement about language performance in general.
+| Case | C median | Java median | Python median | Java / C | Python / C |
+| --- | --- | --- | --- | --- | --- |
+| Quicksort, `random`, `N=5000` | `0.0000983 s` | `0.0001523 s` | `0.0124753 s` | `1.55x` | `126.9x` |
+| Linear search, `miss`, `N=5000` | `0.00000225 s` | `0.00000248 s` | `0.0005631 s` | `1.10x` | `250.5x` |
+| Binary search, `miss`, `N=5000` | `0.0000000490 s` | `0.0000000663 s` | `0.00000386 s` | `1.35x` | `78.7x` |
 
-## Key Findings
+## Interpretation Boundary
 
-- Comparison counts align across all three languages for every published configuration.
-- At `N=5000` on random quicksort input, median in-process times are about `0.000098 s` in C, `0.000152 s` in Java, and `0.012475 s` in Python.
-- Those medians correspond to about `1.55x` for Java vs. C and `126.9x` for Python vs. C in this setup.
-- Linear search behaves exactly as the search case predicts: `first_hit` stays near one comparison, while `last_hit` and `miss` both reach `5000` comparisons at `N=5000`.
-- Binary search remains logarithmic in comparison count: at `N=5000`, published cases range from `23` to `26` comparisons.
+- These are measurements from one documented Windows workstation under a balanced power plan.
+- The repository reports a narrow algorithm-section metric, not user-visible end-to-end latency.
+- The summary CSV now includes uncertainty columns, but the project still does not make formal inferential claims about universal language ordering.
 
 ## Reproduce
 
-This repository is validated through the documented local workflow below. It intentionally does not depend on GitHub Actions or another CI pipeline.
-
-1. Build the C target:
-   - `cd src/c`
-   - `mingw32-make all`
+1. Build the C benchmark:
+   `cd src/c`
+   `mingw32-make all`
 2. Return to the repository root and compile Java:
-   - `cd ../..`
-   - `mvn -q -DskipTests compile`
-3. Run correctness and pipeline tests:
-   - `cd src/c`
-   - `mingw32-make test`
-   - `cd ../..`
-   - `mvn test`
-   - `python -m unittest src/python/test_algorithms.py`
-   - `python -m unittest test_benchmark_pipeline.py`
+   `cd ../..`
+   `mvn -q -DskipTests compile`
+3. Run validation:
+   `cd src/c`
+   `mingw32-make test`
+   `cd ../..`
+   `mvn test`
+   `python -m unittest src/python/test_algorithms.py`
+   `python -m unittest test_benchmark_pipeline.py`
 4. Regenerate shared inputs:
-   - `python data/DataSetGenerator.py`
+   `python data/DataSetGenerator.py`
 5. Collect raw trials:
-   - `python scripts/collect_benchmarks.py`
-   - The collector fails by default if any language or scenario is missing or inconsistent.
-6. Generate summary CSVs and figures:
-   - `python scripts/plot_benchmarks.py`
-
-## Results
-
-![Quicksort timing](results/graphs/quicksort_median_time.png)
-
-![Linear search timing](results/graphs/linear_search_median_time.png)
-
-![Binary search timing](results/graphs/binary_search_median_time.png)
-
-Additional report-style summary views are generated in `results/graphs/`:
-
-- `comparison_counts.png`
-- `timing_overview.png`
-- `timing_speedup_vs_c.png`
+   `python scripts/collect_benchmarks.py`
+6. Rebuild summaries, metadata, and figures:
+   `python scripts/plot_benchmarks.py`
 
 ## Documentation
 
-The supporting report lives in [docs/index.md](docs/index.md). The discussion section now includes a direct comparison to established benchmarking guidance and public evaluations so the methodology can be read in context rather than in isolation.
+The full report is in [docs/index.md](docs/index.md). It now includes an explicit research question, a controlled-versus-uncontrolled setup table, a validity-threats table, and direct links between headline claims and repository artifacts.

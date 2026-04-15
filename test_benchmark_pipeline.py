@@ -1,3 +1,4 @@
+import json
 import sys
 import subprocess
 import tempfile
@@ -80,6 +81,7 @@ class CollectorValidationTests(unittest.TestCase):
             tmp = Path(tmpdir)
             raw_csv = tmp / "smoke_runs.csv"
             summary_csv = tmp / "summary.csv"
+            metadata_json = tmp / "metadata.json"
             graph_dir = tmp / "graphs"
 
             cb.collect(raw_csv, [10], trials=1, warmup=1, languages=["python", "c", "java"], strict=True)
@@ -89,11 +91,17 @@ class CollectorValidationTests(unittest.TestCase):
             self.assertEqual(66, len(rows))
             self.assertEqual([], cb.validate_collection_rows(rows, cases, ["python", "c", "java"], 1, 1))
 
-            pb.run_all(raw_csv, summary_csv, graph_dir, strict=True)
+            pb.run_all(raw_csv, summary_csv, graph_dir, metadata_path=metadata_json, strict=True)
 
             summary_text = summary_csv.read_text(encoding="utf-8")
+            metadata = json.loads(metadata_json.read_text(encoding="utf-8"))
             self.assertTrue(summary_csv.is_file())
+            self.assertTrue(metadata_json.is_file())
+            self.assertIn("q1_seconds", summary_text.splitlines()[0])
+            self.assertIn("ci95_low_seconds", summary_text.splitlines()[0])
             self.assertIn("std_seconds", summary_text.splitlines()[0])
+            self.assertIn("summary_fields", metadata["matrix"])
+            self.assertIn("build_configuration", metadata)
             self.assertTrue((graph_dir / "quicksort_median_time.png").is_file())
             self.assertTrue((graph_dir / "linear_search_median_time.png").is_file())
             self.assertTrue((graph_dir / "binary_search_median_time.png").is_file())
@@ -103,6 +111,22 @@ class CollectorValidationTests(unittest.TestCase):
 
 
 class PlotValidationTests(unittest.TestCase):
+    def test_summarize_trials_emits_uncertainty_columns(self) -> None:
+        case = _bench_case()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            csv_path = Path(tmpdir) / "summary_input.csv"
+            cb.write_rows(csv_path, _rows_for_case("python", case, trials=3, warmup=1))
+
+            trials = pb.load_trials(csv_path)
+            summary = pb.summarize_trials(trials)
+
+            self.assertIn("q1_seconds", summary.columns)
+            self.assertIn("q3_seconds", summary.columns)
+            self.assertIn("iqr_seconds", summary.columns)
+            self.assertIn("ci95_low_seconds", summary.columns)
+            self.assertIn("ci95_high_seconds", summary.columns)
+            self.assertEqual(1, len(summary))
+
     def test_validate_trials_rejects_partial_matrix(self) -> None:
         case = _bench_case()
         with tempfile.TemporaryDirectory() as tmpdir:

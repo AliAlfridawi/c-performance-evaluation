@@ -1,6 +1,6 @@
 # Algorithmic Benchmark Report
 
-This folder contains the supporting write-up for the benchmark harness in this repository. The report mirrors the current code and regenerated datasets in `results/data/`, and the discussion section includes a direct comparison to established benchmarking guidance and similar public evaluations.
+This folder contains the supporting report for the benchmark harness in this repository. The report is aligned to the current checked-in datasets, summary statistics, metadata sidecar, and regenerated figures.
 
 ## Sections
 
@@ -14,9 +14,12 @@ This folder contains the supporting write-up for the benchmark harness in this r
 8. [Conclusion](07_Conclusion.md)
 9. [References](08_References.md)
 
-The report is grounded in the following repository artifacts:
+## Repository Artifacts Used by the Report
 
 - `data/benchmark_inputs/manifest.csv`
 - `results/data/benchmark_runs.csv`
 - `results/data/benchmark_summary.csv`
+- `results/data/benchmark_metadata.json`
 - `results/graphs/*.png`, including `comparison_counts.png`, `timing_overview.png`, and `timing_speedup_vs_c.png`
+
+`benchmark_summary.csv` now carries quartiles, IQR, min/max spread, standard deviation, and 95% bootstrap confidence intervals for the median. `benchmark_metadata.json` records the host, toolchain, build configuration, command templates, and artifact hashes used for the checked-in report snapshot.

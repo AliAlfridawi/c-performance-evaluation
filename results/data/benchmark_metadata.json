@@ -1,0 +1,166 @@
+{
+  "generated_at_utc": "2026-04-15T17:42:34.697326+00:00",
+  "artifacts": {
+    "raw_trials": {
+      "path": "results\\data\\benchmark_runs.csv",
+      "sha256": "e34ccdfba0d2ba3f91c0a2dac7990c6719d88e701e1f6470ac394160563d8713",
+      "bytes": 582407
+    },
+    "summary": {
+      "path": "results\\data\\benchmark_summary.csv",
+      "sha256": "bc452e434f9dc746d967d818c4fbc5a2569d52ae8c2db7cf481c72145ae502a9",
+      "bytes": 81456
+    },
+    "graphs": [
+      {
+        "path": "results\\graphs\\binary_search_median_time.png",
+        "sha256": "d194ba794a80693a71685ba2fd9a3c71e7802a2fdd844cd0e7e363f5933da7fd",
+        "bytes": 217747
+      },
+      {
+        "path": "results\\graphs\\comparison_counts.png",
+        "sha256": "5e51f81b08048aff3f76e99ad99b1d5dea38f9b34207cab343eeb32265e67ce5",
+        "bytes": 311248
+      },
+      {
+        "path": "results\\graphs\\linear_search_median_time.png",
+        "sha256": "59be3ebe9cfc887bb11665f787fb35bd508c7edbb9078fc2aaa2f3e852806c8e",
+        "bytes": 252775
+      },
+      {
+        "path": "results\\graphs\\quicksort_median_time.png",
+        "sha256": "5ba706cb01e7b43ef1c8e2a3222051a8ed5acc484c3b1c2e65d492e744afd927",
+        "bytes": 262905
+      },
+      {
+        "path": "results\\graphs\\timing_overview.png",
+        "sha256": "aff5eeff8ce2948625b4c2cb3f271a83416c3cc8eee113c621b5d8b6adb376f9",
+        "bytes": 446293
+      },
+      {
+        "path": "results\\graphs\\timing_speedup_vs_c.png",
+        "sha256": "9faad526792673c32553251b9e3181dcd6036d8529f79aa8dbb146603a626242",
+        "bytes": 359618
+      }
+    ]
+  },
+  "matrix": {
+    "languages": [
+      "c",
+      "java",
+      "python"
+    ],
+    "algorithms": [
+      "binary_search",
+      "linear_search",
+      "quicksort"
+    ],
+    "quicksort_distributions": [
+      "random",
+      "ascending",
+      "descending"
+    ],
+    "search_cases": [
+      "first_hit",
+      "middle_hit",
+      "last_hit",
+      "miss"
+    ],
+    "n_values": [
+      10,
+      25,
+      50,
+      100,
+      200,
+      500,
+      1000,
+      2000,
+      5000
+    ],
+    "benchmark_groups": 297,
+    "raw_rows": 7425,
+    "warmup_rows": 1485,
+    "measured_rows": 5940,
+    "warmup_trials_per_group": 5,
+    "measured_trials_per_group": 20,
+    "summary_fields": [
+      "language",
+      "algorithm",
+      "distribution",
+      "input_id",
+      "N",
+      "search_case",
+      "median_seconds",
+      "q1_seconds",
+      "q3_seconds",
+      "iqr_seconds",
+      "ci95_low_seconds",
+      "ci95_high_seconds",
+      "min_seconds",
+      "max_seconds",
+      "std_seconds",
+      "median_comparisons",
+      "trials",
+      "median_batch_loops"
+    ],
+    "bootstrap": {
+      "resamples": 2000,
+      "confidence_level": 0.95,
+      "statistic": "median seconds per run"
+    }
+  },
+  "commands": {
+    "build": [
+      "cd src/c",
+      "mingw32-make all",
+      "cd ../..",
+      "mvn -q -DskipTests compile"
+    ],
+    "validate": [
+      "cd src/c",
+      "mingw32-make test",
+      "cd ../..",
+      "mvn test",
+      "python -m unittest src/python/test_algorithms.py",
+      "python -m unittest test_benchmark_pipeline.py"
+    ],
+    "collect": "python scripts/collect_benchmarks.py",
+    "plot": "python scripts/plot_benchmarks.py",
+    "runner_templates": {
+      "python": "python src/python/benchmark.py <algorithm> <distribution> <N> --input-file <path> --trials <n> --warmup <n> --search-case <case>",
+      "c": "src/c/benchmark.exe <algorithm> <distribution> <N> --input-file <path> --trials <n> --warmup <n> --search-case <case>",
+      "java": "java -cp target/classes bench.Benchmark <algorithm> <distribution> <N> --input-file <path> --trials <n> --warmup <n> --search-case <case>"
+    }
+  },
+  "build_configuration": {
+    "c": {
+      "make_target": "src/c/Makefile",
+      "cflags": "-std=c11 -Wall -Wextra -O2"
+    },
+    "java": {
+      "pom": "pom.xml",
+      "maven_compiler_release": "17",
+      "jvm_flags": []
+    },
+    "python": {
+      "runtime_flags": [],
+      "timer": "time.perf_counter_ns()"
+    }
+  },
+  "host": {
+    "system": "Windows",
+    "release": "10",
+    "version": "10.0.26200",
+    "machine": "AMD64",
+    "processor": "AMD64 Family 25 Model 117 Stepping 2, AuthenticAMD",
+    "node": "clanka",
+    "logical_cpu_count": 16,
+    "python_version": "3.11.9",
+    "active_power_plan": "Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)"
+  },
+  "toolchains": {
+    "gcc_version": "gcc (Rev8, Built by MSYS2 project) 15.2.0",
+    "java_version": "openjdk version \"17.0.18\" 2026-01-20",
+    "maven_version": "Apache Maven 3.9.14 (996c630dbc656c76214ce58821dcc58be960875b)"
+  }
+}
