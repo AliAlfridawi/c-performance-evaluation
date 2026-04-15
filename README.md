@@ -57,6 +57,8 @@ The main caveat is not correctness but scope. Stronger benchmarking systems such
 
 ## Reproduce
 
+This repository is validated through the documented local workflow below. It intentionally does not depend on GitHub Actions or another CI pipeline.
+
 1. Build the C target:
    - `cd src/c`
    - `mingw32-make all`
@@ -68,9 +70,7 @@ The main caveat is not correctness but scope. Stronger benchmarking systems such
    - `mingw32-make test`
    - `cd ../..`
    - `mvn test`
-   - `cd src/python`
-   - `python -m unittest test_algorithms.py`
-   - `cd ../..`
+   - `python -m unittest src/python/test_algorithms.py`
    - `python -m unittest test_benchmark_pipeline.py`
 4. Regenerate shared inputs:
    - `python data/DataSetGenerator.py`

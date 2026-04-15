@@ -23,6 +23,8 @@ Repository tooling:
 - Java sources are compiled from `src/java/` through Maven
 - Python benchmarking and plotting scripts run from the repository root
 
+This repository uses a documented local workflow rather than a continuous-integration pipeline. That keeps the benchmark process aligned with the Windows environment used for the published artifact and avoids implying cross-platform automation support that the project does not claim.
+
 Recommended reproduction workflow:
 
 1. `cd src/c`
@@ -37,7 +39,7 @@ Validation commands used by this repository:
 
 - `cd src/c && mingw32-make test`
 - `mvn test`
-- `cd src/python && python -m unittest test_algorithms.py`
+- `python -m unittest src/python/test_algorithms.py`
 - `python -m unittest test_benchmark_pipeline.py`
 
 ## B. Output Artifacts

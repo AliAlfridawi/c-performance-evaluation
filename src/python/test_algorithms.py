@@ -1,7 +1,14 @@
 """Correctness tests for algorithms (small N, deterministic)."""
 
 import copy
+import sys
 import unittest
+from pathlib import Path
+
+# Allow running this test module from either the repository root or src/python.
+THIS_DIR = Path(__file__).resolve().parent
+if str(THIS_DIR) not in sys.path:
+    sys.path.insert(0, str(THIS_DIR))
 
 from algorithms import (
     binary_search,
